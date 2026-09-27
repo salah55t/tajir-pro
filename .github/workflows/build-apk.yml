@@ -10,6 +10,7 @@ jobs:
   build-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     defaults:
@@ -25,11 +26,29 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK components
+      - name: Verify / install Android SDK components
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
           echo "ANDROID_HOME=$ANDROID_HOME"
+          if [ -d "$ANDROID_HOME/platforms/android-34" ] && [ -d "$ANDROID_HOME/build-tools/34.0.0" ]; then
+            echo "[OK] android-34 + build-tools 34.0.0 are preinstalled on the runner - skipping sdkmanager entirely"
+            exit 0
+          fi
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          ok=0
+          for i in 1 2 3; do
+            echo "[ATTEMPT $i/3] installing SDK components..."
+            yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+            if "$SDKM" "platforms;android-34" "build-tools;34.0.0" > /dev/null; then
+              ok=1
+              break
+            fi
+            echo "sdkmanager failed - waiting 15s before retry..."
+            sleep 15
+          done
+          if [ "$ok" != "1" ]; then
+            echo "[FAIL] could not install SDK components after 3 attempts"
+            exit 1
+          fi
 
       - name: Build Debug APK
         working-directory: android
