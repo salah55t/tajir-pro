@@ -1,0 +1,106 @@
+// Prisma schema — منصة تاجر SaaS لإدارة المخزون والطلبات والردود الآلية
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// المنتجات — إدارة المخزون
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  sku         String      @unique
+  description String?
+  category    String?
+  price       Float       @default(0)
+  cost        Float?
+  quantity    Int         @default(0)
+  minQuantity Int         @default(5)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  orderItems  OrderItem[]
+}
+
+// العملاء
+model Customer {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String
+  address   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  orders    Order[]
+  messages  Message[]
+}
+
+// شركات التوصيل المحلية
+model DeliveryCompany {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  coverage    String?
+  flatFee     Float    @default(0)
+  apiKey      String?
+  webhookUrl  String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+// الطلبات
+model Order {
+  id                String          @id @default(cuid())
+  orderNumber       String          @unique
+  customerId        String
+  customer          Customer        @relation(fields: [customerId], references: [id])
+  deliveryCompanyId String?
+  deliveryCompany   DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id])
+  status            String          @default("pending")
+  total             Float           @default(0)
+  deliveryFee       Float           @default(0)
+  address           String?
+  notes             String?
+  trackingNumber    String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  items             OrderItem[]
+  messages          Message[]
+}
+
+// عناصر الطلب
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+}
+
+// الرسائل — محادثات العملاء والردود الآلية
+model Message {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id])
+  direction   String // incoming | outgoing
+  content     String
+  channel     String   @default("whatsapp")
+  isAuto      Boolean  @default(false)
+  deliveredBy String? // "ai" | "merchant"
+  createdAt   DateTime @default(now())
+}
+
+// الإعدادات (مفتاح/قيمة)
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
