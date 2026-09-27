@@ -1,0 +1,73 @@
+name: Build Android APK (تاجر برو)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build Debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon
+
+      - name: Prepare APK file
+        run: |
+          mkdir -p apk-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk apk-output/TajirPro-debug.apk
+          ls -lh apk-output
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TajirPro-debug-APK
+          path: apk-output/TajirPro-debug.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create GitHub Release with APK
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" apk-output/TajirPro-debug.apk \
+            --title "تاجر برو ${GITHUB_REF_NAME} — تطبيق أندرويد" \
+            --notes "## 📱 تحميل تطبيق تاجر برو (Android)
+
+          ### طريقة التثبيت
+          1. حمّل الملف \`TajirPro-debug.apk\` من قسم **Assets** في أسفل هذه الصفحة
+          2. افتح الملف على هاتفك وفعّل «التثبيت من مصادر غير معروفة» عند الطلب
+          3. ثبّت التطبيق وابدأ الاستخدام
+
+          ### المميزات
+          - 📦 إدارة المخزون: منتجات، كميات، تنبيهات نفاذ، سجل حركات
+          - 🚚 الطلبات والتوصيل: ربط الطلبات بشركات التوصيل المحلية وتتبع الحالات
+          - 🤖 الردود التلقائية: قوالب جاهزة ومحرك مطابقة عربي ذكي
+          - 💾 يعمل بدون إنترنت والبيانات محفوظة على جهازك
+
+          > ملاحظة: هذا إصدار Debug مخصص للاستخدام الشخصي والاختبار.
+          > نسخة الويب (Next.js) تعمل كما هي في نفس المستودع." \
+            || gh release upload "${GITHUB_REF_NAME}" apk-output/TajirPro-debug.apk --clobber
