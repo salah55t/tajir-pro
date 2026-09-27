@@ -322,3 +322,255 @@ input,select,textarea{ font-family:inherit; }
 .about-line{ display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed var(--line); }
 .about-line:last-child{ border-bottom:none; }
 .about-line span:first-child{ color:var(--muted); }
+
+/* ============================================================
+   v1.1.0 — نقطة البيع + القارئ + التنبيهات
+   ============================================================ */
+
+/* ---------- POS sub-tabs ---------- */
+.pos-tabs{ display:flex; gap:8px; margin-bottom:12px; }
+.pos-tabs .btn{ flex:1; }
+.pos-tabs .btn.on{ box-shadow:0 4px 14px rgba(4,120,87,.28); }
+
+/* ---------- Scan hero ---------- */
+.scan-hero{
+  background:linear-gradient(135deg, var(--primary-dark), var(--primary));
+  border-radius:20px; padding:16px; color:#fff; margin-bottom:12px;
+  box-shadow:0 8px 22px rgba(4,120,87,.28);
+}
+.scan-hero .sh-title{ font-weight:800; font-size:15px; margin-bottom:2px; }
+.scan-hero .sh-sub{ font-size:12px; opacity:.88; margin-bottom:12px; }
+.scan-btn{
+  width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
+  background:#fff; color:var(--primary-dark); border:none;
+  border-radius:14px; padding:14px; font-size:15.5px; font-weight:800; cursor:pointer;
+  min-height:56px; box-shadow:0 6px 16px rgba(2,6,23,.18);
+}
+.scan-btn:active{ transform:scale(.985); }
+.scan-btn svg{ flex:none; }
+.manual-row{ display:flex; gap:8px; margin-top:10px; }
+.manual-row input{
+  flex:1; border:1.5px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12);
+  border-radius:12px; padding:11px 13px; color:#fff; font-size:14px; min-height:46px; outline:none;
+}
+.manual-row input::placeholder{ color:rgba(255,255,255,.75); }
+.manual-row input:focus{ border-color:#fff; }
+.manual-row button{
+  flex:none; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.4);
+  color:#fff; border-radius:12px; padding:0 16px; font-size:13px; font-weight:800; cursor:pointer;
+}
+
+/* ---------- Cart rows ---------- */
+.cart-row{
+  background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+  border:1px solid rgba(226,232,240,.6);
+  padding:12px 13px; margin-bottom:9px;
+  animation:cartIn .18s ease;
+}
+@keyframes cartIn{ from{ transform:translateY(8px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+.cart-row.top{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.cart-name{ font-weight:800; font-size:14.5px; }
+.cart-name.flash{ animation:flashName .7s ease; }
+@keyframes flashName{ 0%{ background:var(--primary-light) } 100%{ background:transparent } }
+.cart-meta{ font-size:12px; color:var(--muted); margin-top:1px; }
+.cart-line{ font-weight:800; font-size:14.5px; color:var(--primary-dark); white-space:nowrap; }
+.cart-ctrl{ display:flex; align-items:center; justify-content:space-between; margin-top:9px; gap:8px; }
+.stepper{ display:flex; align-items:center; gap:2px; background:#F1F5F9; border-radius:12px; padding:3px; }
+.stepper button{
+  width:38px; height:36px; border:none; background:#fff; color:var(--primary-dark);
+  border-radius:9px; font-size:19px; font-weight:800; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(15,23,42,.12);
+}
+.stepper button:active{ background:var(--primary-light); }
+.stepper button.minus{ color:var(--red); }
+.stepper .st-qty{ min-width:40px; text-align:center; font-weight:800; font-size:15px; }
+.cart-x{
+  width:36px; height:36px; border-radius:10px; border:none; background:#FEF2F2;
+  color:var(--red); font-size:14px; font-weight:800; cursor:pointer;
+}
+.cart-empty{ text-align:center; padding:30px 16px; color:var(--muted); }
+.cart-empty .ce-icon{
+  width:66px; height:66px; margin:0 auto 12px; border-radius:20px;
+  background:#fff; box-shadow:var(--shadow); color:#94A3B8;
+  display:flex; align-items:center; justify-content:center;
+}
+.cart-empty h4{ margin:0 0 4px; color:#334155; font-size:15px; }
+.cart-empty p{ margin:0 0 14px; font-size:13px; }
+
+/* ---------- Checkout bar ---------- */
+.checkout-bar{
+  position:fixed; bottom:calc(64px + env(safe-area-inset-bottom));
+  inset-inline:0; z-index:42; pointer-events:none;
+}
+.checkout-bar .cb-in{
+  pointer-events:auto; max-width:640px; margin:0 auto;
+  display:flex; align-items:center; gap:10px;
+  background:#0F172A; color:#fff; border-radius:18px;
+  margin-inline:12px; padding:10px 12px;
+  box-shadow:0 12px 30px rgba(2,6,23,.4);
+}
+.cb-total{ display:flex; flex-direction:column; min-width:96px; }
+.cb-total .cb-label{ font-size:10.5px; opacity:.7; font-weight:700; }
+.cb-total .cb-val{ font-size:16.5px; font-weight:800; white-space:nowrap; }
+.checkout-bar .btn{ flex:1; background:var(--primary); min-height:48px; }
+body.has-checkoutbar{ padding-bottom:calc(160px + env(safe-area-inset-bottom)); }
+
+/* ---------- Discount field ---------- */
+.disc-row{ display:flex; align-items:flex-end; gap:8px; }
+.disc-row .field{ flex:1; margin-bottom:0; }
+
+/* ---------- Receipt ---------- */
+.receipt{
+  background:#fff; border:1.5px dashed var(--line); border-radius:14px;
+  padding:14px; font-size:13px;
+}
+.receipt-head{ text-align:center; border-bottom:1.5px dashed var(--line); padding-bottom:10px; margin-bottom:10px; }
+.receipt-head .r-store{ font-weight:800; font-size:16px; }
+.receipt-head .r-code{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+.receipt-item{ display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-size:13px; }
+.receipt-item .ri-name{ flex:1; }
+.receipt-item .ri-qty{ color:var(--muted); white-space:nowrap; }
+.receipt-item .ri-total{ font-weight:700; white-space:nowrap; }
+.receipt .total-line.grand{ font-size:16px; }
+.receipt-foot{ text-align:center; color:var(--muted); font-size:11.5px; margin-top:10px; border-top:1.5px dashed var(--line); padding-top:10px; }
+
+/* ---------- Sales history ---------- */
+.day-head{
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:13px; font-weight:800; color:#334155;
+  margin:16px 2px 8px;
+}
+.day-head .dh-sum{ font-size:12px; color:var(--muted); font-weight:700; }
+.sale-card{ position:relative; }
+.sale-card.voided{ opacity:.6; }
+.sale-card .void-badge{
+  position:absolute; top:12px; inset-inline-end:60px;
+}
+.pos-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+.pos-stats .ps{
+  background:#fff; border-radius:14px; box-shadow:var(--shadow);
+  border:1px solid rgba(226,232,240,.6);
+  padding:10px 8px; text-align:center;
+}
+.pos-stats .ps-val{ font-weight:800; font-size:14.5px; color:var(--primary-dark); white-space:nowrap; }
+.pos-stats .ps-label{ font-size:10.5px; color:var(--muted); font-weight:700; margin-top:2px; }
+
+/* ============================================================
+   Scanner overlay (قارئ الباركود بالكاميرا)
+   ============================================================ */
+#scannerRoot .scan-wrap{
+  position:fixed; inset:0; z-index:300;
+  background:#02060F; display:flex; flex-direction:column;
+  animation:fadeIn .15s ease;
+}
+.scan-top{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 16px; color:#fff;
+  padding-top:calc(14px + env(safe-area-inset-top));
+}
+.scan-top .st-title{ font-weight:800; font-size:15.5px; }
+.scan-top .st-sub{ font-size:11.5px; opacity:.75; margin-top:1px; }
+.scan-close{
+  width:40px; height:40px; border-radius:50%; border:none;
+  background:rgba(255,255,255,.14); color:#fff; font-size:17px; cursor:pointer;
+}
+.scan-region{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; padding:10px 14px; min-height:0; }
+#scannerViewport{ width:100%; max-width:520px; border-radius:18px; overflow:hidden; position:relative; }
+#scannerViewport video{ border-radius:18px; object-fit:cover; }
+.scan-frame{
+  position:absolute; pointer-events:none; z-index:5;
+}
+.scan-laser{
+  position:absolute; z-index:6; pointer-events:none;
+  left:8%; right:8%; height:2.5px; border-radius:99px;
+  background:linear-gradient(90deg, transparent, #34D399 25%, #A7F3D0 50%, #34D399 75%, transparent);
+  box-shadow:0 0 12px rgba(52,211,153,.9);
+  animation:laserMove 2.1s ease-in-out infinite;
+}
+@keyframes laserMove{ 0%{ top:18% } 50%{ top:80% } 100%{ top:18% } }
+.scan-hint{
+  text-align:center; color:rgba(255,255,255,.85); font-size:12.5px; font-weight:700;
+  padding:8px 16px 2px;
+}
+.scan-last{
+  margin:10px 16px 0; border-radius:12px; padding:10px 14px;
+  background:rgba(52,211,153,.15); border:1px solid rgba(52,211,153,.5);
+  color:#A7F3D0; font-size:13px; font-weight:800; text-align:center;
+  min-height:20px;
+}
+.scan-last.err{ background:rgba(239,68,68,.16); border-color:rgba(239,68,68,.55); color:#FECACA; }
+.scan-actions{ display:flex; gap:10px; padding:12px 16px calc(18px + env(safe-area-inset-bottom)); }
+.scan-actions .btn{ flex:1; background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.3); }
+.scan-actions .btn.primary{ background:var(--primary); border-color:var(--primary); }
+.scan-err-box{
+  margin:auto 20px; background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.5);
+  border-radius:16px; padding:22px 18px; text-align:center; color:#FECACA;
+}
+.scan-err-box h4{ margin:0 0 6px; color:#fff; font-size:15px; }
+.scan-err-box p{ margin:0 0 14px; font-size:13px; opacity:.9; }
+
+/* ---------- Alert center ---------- */
+.alert-banner{
+  border-radius:16px; padding:13px 14px; margin-bottom:12px; cursor:pointer;
+  display:flex; align-items:center; gap:12px;
+  box-shadow:var(--shadow); border:1px solid rgba(226,232,240,.6); background:#fff;
+}
+.alert-banner .ab-icon{
+  width:42px; height:42px; border-radius:13px; flex:none;
+  display:flex; align-items:center; justify-content:center;
+}
+.alert-banner .ab-title{ font-weight:800; font-size:13.5px; }
+.alert-banner .ab-sub{ font-size:11.5px; color:var(--muted); margin-top:1px; }
+.alert-banner .ab-count{
+  margin-inline-start:auto; font-weight:800; font-size:15px; color:#fff;
+  min-width:30px; height:30px; border-radius:999px;
+  display:flex; align-items:center; justify-content:center; padding:0 9px;
+}
+.alert-banner.warn .ab-icon{ background:var(--amber-bg); color:var(--amber); }
+.alert-banner.warn .ab-count{ background:var(--amber); }
+.alert-banner.danger .ab-icon{ background:var(--red-bg); color:var(--red); }
+.alert-banner.danger .ab-count{ background:var(--red); }
+.alert-section{ margin-bottom:6px; }
+.alert-row{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:9px 2px; border-bottom:1px dashed var(--line); font-size:13.5px;
+}
+.alert-row:last-child{ border-bottom:none; }
+.alert-row .ar-name{ font-weight:700; flex:1; }
+.alert-row .ar-info{ font-size:11.5px; color:var(--muted); margin-top:1px; }
+.alert-row .badge{ flex:none; }
+
+/* ---------- Barcode chip in product rows ---------- */
+.bc-chip{
+  display:inline-flex; align-items:center; gap:4px;
+  background:#F8FAFC; border:1px solid var(--line);
+  border-radius:8px; padding:1px 8px;
+  font-size:10.5px; font-weight:700; color:#475569;
+}
+.expiry-badge{
+  display:inline-flex; align-items:center; gap:4px;
+  border-radius:8px; padding:2px 8px; font-size:10.5px; font-weight:800;
+}
+.expiry-badge.ok{ background:var(--green-bg); color:var(--green); }
+.expiry-badge.soon{ background:var(--amber-bg); color:var(--amber); }
+.expiry-badge.expired{ background:var(--red-bg); color:var(--red); }
+
+/* ---------- Scan field (barcode input with camera button) ---------- */
+.scan-field{ display:flex; gap:8px; align-items:center; }
+.scan-field input{ flex:1; }
+.scan-field .cam-btn{
+  flex:none; width:48px; height:46px; border-radius:12px; border:1.5px solid var(--primary);
+  background:var(--primary-light); color:var(--primary-dark); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* success animation for sale */
+.sale-success-icon{
+  width:74px; height:74px; margin:6px auto 12px; border-radius:50%;
+  background:var(--primary-light); color:var(--primary-dark);
+  display:flex; align-items:center; justify-content:center;
+  animation:popIn .25s ease;
+}
+
+/* toast فوق القارئ (القارئ z-index 300) */
+#toastRoot{ z-index:400; }
