@@ -387,7 +387,8 @@ button:focus-visible{ outline:2px solid rgba(5,150,105,.45); outline-offset:2px;
 }
 .hero > *{ position:relative; z-index:1; }
 .hero .h-hi{ font-size:15px; font-weight:800; }
-.hero .h-date{ font-size:12px; opacity:.85; margin-bottom:10px; }
+.hero .h-desc{ font-size:12.5px; line-height:1.7; opacity:.92; margin-top:5px; }
+.hero .h-date{ font-size:12px; opacity:.85; margin-bottom:10px; margin-top:5px; }
 .hero .h-actions{ display:flex; gap:8px; }
 .hero .h-btn{
   flex:1; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.3);
@@ -398,6 +399,7 @@ button:focus-visible{ outline:2px solid rgba(5,150,105,.45); outline-offset:2px;
 .hero .h-btn:active{ transform:scale(.96); background:rgba(255,255,255,.24); }
 
 /* ---------- About ---------- */
+.about-desc{ font-size:12.5px; line-height:1.8; color:var(--muted); margin:2px 0 10px; padding-bottom:10px; border-bottom:1px dashed var(--line); }
 .about-line{ display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed var(--line); }
 .about-line:last-child{ border-bottom:none; }
 .about-line span:first-child{ color:var(--muted); }

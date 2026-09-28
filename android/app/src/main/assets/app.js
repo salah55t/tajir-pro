@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.3.0
+   تاجر برو — TajirPro v1.3.1
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
    + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
@@ -508,6 +508,7 @@ function viewDash(){
   return '' +
   '<div class="hero">' +
     '<div class="h-hi">مرحباً 👋 ' + esc(db.settings.storeName) + '</div>' +
+    '<div class="h-desc">نقطة بيع بمسح الباركود، فواتير حرارية عبر البلوتوث، تحقق من فواتيرك بمسح رمزها لمنع الاحتيال، وإدارة كاملة للمخزون مع تنبيهات ذكية — وكل ذلك يعمل بدون إنترنت.</div>' +
     '<div class="h-date">' + dateStr + '</div>' +
     '<div class="h-actions">' +
       '<button class="h-btn" style="background:#fff;color:var(--primary-dark);border-color:#fff" onclick="showTab(\'pos\')">' + icons.scan + ' بيع جديد</button>' +
@@ -1787,8 +1788,9 @@ function viewSettings(){
 
   '<div class="card">' +
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
+    '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، ونسخ احتياطي محلي.</p>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.3.0</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.3.1</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
     '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
