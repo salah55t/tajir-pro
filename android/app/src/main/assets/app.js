@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.5.0
+   تاجر برو — TajirPro v1.5.1
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
    + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
@@ -1878,13 +1878,24 @@ function viewSettings(){
   return '' +
   '<div class="card">' +
     '<div class="card-title">🏪 معلومات المتجر</div>' +
-    '<div class="field"><label>اسم المتجر</label><input id="setStore" type="text" value="' + esc(db.settings.storeName) + '"></div>' +
-    '<div class="field"><label>هاتف المتجر <span style="font-weight:400;color:var(--muted)">(يظهر على الفاتورة المطبوعة)</span></label>' +
-      '<input id="setPhone" type="tel" inputmode="tel" value="' + esc(db.settings.storePhone || '') + '" placeholder="مثال: 0555 12 34 56" style="direction:ltr;text-align:right"></div>' +
+    '<div class="field"><label>اسم المتجر <span style="font-weight:400;color:var(--muted)">(يظهر أعلى وصل الفاتورة المطبوعة)</span></label><input id="setStore" type="text" value="' + esc(db.settings.storeName) + '" oninput="updStorePreview()"></div>' +
+    '<div class="field"><label>هاتف المتجر <span style="font-weight:400;color:var(--muted)">(يظهر تحت الاسم على الوصل)</span></label>' +
+      '<input id="setPhone" type="tel" inputmode="tel" value="' + esc(db.settings.storePhone || '') + '" placeholder="مثال: 0555 12 34 56" style="direction:ltr;text-align:right" oninput="updStorePreview()"></div>' +
     '<div class="form-grid">' +
       '<div class="field"><label>العملة</label><input id="setCurr" type="text" value="' + esc(db.settings.currency) + '" placeholder="د.ج / ر.س / درهم"></div>' +
       '<div class="field"><label>حد التنبيه الافتراضي</label><input id="setLow" type="number" inputmode="numeric" min="0" value="' + esc(db.settings.lowStockDefault) + '"></div>' +
       '<div class="field"><label>تحذير قبل انتهاء الصلاحية (يوم)</label><input id="setExp" type="number" inputmode="numeric" min="1" value="' + esc(db.settings.expiryWarnDays || 30) + '"></div>' +
+    '</div>' +
+    '<div class="rcpt-preview">' +
+      '<div class="rp-cap">معاينة رأس الوصل المطبوع</div>' +
+      '<div class="rp-name" id="rpName">' + esc(db.settings.storeName) + '</div>' +
+      '<div class="rp-phone" id="rpPhone"' + (db.settings.storePhone ? '' : ' style="display:none"') + '>' + esc(db.settings.storePhone || '') + '</div>' +
+      '<div class="rp-dash"></div>' +
+      '<div class="rp-line"><span>سكر أبيض 1كغ × 2</span><span class="ltr">240</span></div>' +
+      '<div class="rp-line"><span>زيت طهي 1ل × 1</span><span class="ltr">280</span></div>' +
+      '<div class="rp-dash"></div>' +
+      '<div class="rp-total"><span>الإجمالي</span><span class="ltr">520 ' + esc(db.settings.currency || 'د.ج') + '</span></div>' +
+      '<div class="rp-qr">رمز QR</div>' +
     '</div>' +
     '<button class="btn block" onclick="saveStoreInfo()">حفظ معلومات المتجر</button>' +
   '</div>' +
@@ -1932,7 +1943,7 @@ function viewSettings(){
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
     '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، ونسخ احتياطي محلي.</p>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.5.0</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.5.1</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
     '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
@@ -1955,7 +1966,19 @@ function saveStoreInfo(){
   saveDB();
   $('#storeNameTop').textContent = name;
   render();
-  toast('تم حفظ المعلومات ✓');
+  toast('تم الحفظ — سيظهر "' + name + '" أعلى وصل الفاتورة ✓');
+}
+
+/* معاينة حية لرأس الوصل أثناء كتابة الاسم/الهاتف */
+function updStorePreview(){
+  var n = $('#setStore'), p = $('#setPhone');
+  var rn = $('#rpName'), rp = $('#rpPhone');
+  if(rn && n) rn.textContent = n.value.trim() || 'اسم المتجر';
+  if(rp && p){
+    var v = p.value.trim();
+    rp.textContent = v;
+    rp.style.display = v ? 'block' : 'none';
+  }
 }
 
 function saveScannerSettings(){
