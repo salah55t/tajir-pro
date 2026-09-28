@@ -483,6 +483,10 @@ button:focus-visible{ outline:2px solid rgba(5,150,105,.45); outline-offset:2px;
 .stepper button:active{ background:var(--primary-light); }
 .stepper button.minus{ color:var(--red); }
 .stepper .st-qty{ min-width:40px; text-align:center; font-weight:800; font-size:15px; }
+/* عداد كمية نافذة السعر المباشر */
+.qp-stepper{ justify-content:center; max-width:220px; margin:0 auto; }
+.qp-stepper button{ width:50px; height:44px; font-size:23px; }
+.qp-stepper .st-qty{ min-width:60px; font-size:18px; }
 .cart-x{
   width:36px; height:36px; border-radius:10px; border:none; background:#FEF2F2;
   color:var(--red); font-size:14px; font-weight:800; cursor:pointer;

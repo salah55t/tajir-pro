@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.4.0
+   تاجر برو — TajirPro v1.5.0
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
    + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
@@ -589,10 +589,10 @@ function viewPosCart(){
   var hero =
     '<div class="scan-hero">' +
       '<div class="sh-title">🛒 نقطة البيع السريعة</div>' +
-      '<div class="sh-sub">امسح باركود المنتج بالكاميرا، أو اختر منتجاً بدون باركود من القائمة — يُضاف للسلة ويُحتسب تلقائياً ويُخصم من المخزون</div>' +
+      '<div class="sh-sub">امسح باركود المنتج بالكاميرا، أو أدخل السعر مباشرة للسلع بدون باركود — يُضاف للسلة ويُحتسب تلقائياً</div>' +
       '<div class="scan-actions">' +
         '<button class="scan-btn" onclick="openScannerForCart()">' + SCAN_ICON_POS + ' مسح باركود</button>' +
-        '<button class="scan-btn alt" onclick="openProductPicker()">' + TAG_ICON_POS + ' بدون باركود</button>' +
+        '<button class="scan-btn alt" onclick="openQuickPrice()">' + TAG_ICON_POS + ' سعر مباشر</button>' +
       '</div>' +
       '<div class="manual-row">' +
         '<input id="posManual" type="text" inputmode="numeric" placeholder="أو أدخل رقم الباركود يدوياً..." >' +
@@ -606,10 +606,10 @@ function viewPosCart(){
   }else{
     cartHtml = '<div class="card"><div class="cart-empty">' +
       '<div class="ce-icon">' + SCAN_ICON_POS + '</div>' +
-      '<h4>السلة فارغة</h4><p>امسح أول منتج بالكاميرا، أو أدخل الباركود يدوياً، أو اختر منتجاً بدون باركود من القائمة</p>' +
+      '<h4>السلة فارغة</h4><p>امسح منتجاً بالكاميرا، أو أدخل سعراً مباشرة للسلع بدون باركود</p>' +
       '<div class="ce-actions">' +
         '<button class="btn" onclick="openScannerForCart()">فتح القارئ</button>' +
-        '<button class="btn ghost" onclick="openProductPicker()">بيع بدون باركود</button>' +
+        '<button class="btn ghost" onclick="openQuickPrice()">إضافة سعر مباشر</button>' +
       '</div></div></div>';
   }
 
@@ -641,12 +641,15 @@ function viewPosCart(){
 
 function cartRowHtml(line){
   var p = findProduct(line.productId);
+  var isOpen = line.open === true;
   var stockLeft = p ? (Number(p.qty) || 0) : 0;
   return '<div class="cart-row" id="crow-' + line.productId + '">' +
     '<div class="cart-row top">' +
       '<div>' +
         '<div class="cart-name">' + esc(line.name) + '</div>' +
-        '<div class="cart-meta"><span class="ltr">' + money(line.price) + '</span> / وحدة • متوفر بالمخزون: ' + stockLeft + '</div>' +
+        (isOpen
+          ? '<div class="cart-meta"><span>سعر مباشر • بدون خصم من المخزون</span></div>'
+          : '<div class="cart-meta"><span class="ltr">' + money(line.price) + '</span> / وحدة • متوفر بالمخزون: ' + stockLeft + '</div>') +
       '</div>' +
       '<div class="cart-line ltr">' + money(line.price * line.qty) + '</div>' +
     '</div>' +
@@ -665,9 +668,9 @@ function renderCartOnly(flashProductId){
   var box = $('#cartList');
   if(!box) return;
   var t = cartTotals();
-  /* إزالة أسطر منتجات محذوفة من المخزون */
+  /* إزالة أسطر منتجات محذوفة من المخزون (مع الإبقاء على أسطر السعر المباشر) */
   var before = db.cart.length;
-  db.cart = db.cart.filter(function(l){ return !!findProduct(l.productId); });
+  db.cart = db.cart.filter(function(l){ return l.open === true || !!findProduct(l.productId); });
   if(db.cart.length !== before) saveDB();
 
   box.innerHTML = db.cart.length ? db.cart.map(cartRowHtml).join('') :
@@ -676,7 +679,7 @@ function renderCartOnly(flashProductId){
       '<h4>السلة فارغة</h4><p>امسح أول منتج بالكاميرا لبدء عملية البيع</p>' +
       '<div class="ce-actions">' +
         '<button class="btn" onclick="openScannerForCart()">فتح القارئ</button>' +
-        '<button class="btn ghost" onclick="openProductPicker()">بيع بدون باركود</button>' +
+        '<button class="btn ghost" onclick="openQuickPrice()">إضافة سعر مباشر</button>' +
       '</div></div></div>';
 
   var cc = $('#cartCount');
@@ -798,6 +801,72 @@ function posManualAdd(){
   if(!v){ toast('أدخل رقم الباركود أولاً', 'err'); return; }
   el.value = '';
   posScanCode(v);
+}
+
+/* ---------- سعر مباشر (إضافة سعر فوري بدون باركود ولا منتج مسجل) ---------- */
+var QP_QTY = 1;
+
+function openQuickPrice(){
+  QP_QTY = 1;
+  openModal(
+    sheetHead('إضافة سعر مباشر — بدون باركود') +
+    '<div class="field"><label>اسم الصنف <span style="font-weight:400;color:var(--muted)">(اختياري)</span></label>' +
+      '<input id="qpName" type="text" placeholder="مثال: خضار مشكلة / سلع سائبة"></div>' +
+    '<div class="field"><label>السعر *</label>' +
+      '<input id="qpPrice" type="number" inputmode="decimal" min="0" step="any" placeholder="0" style="font-size:22px;font-weight:800;text-align:center;color:var(--primary-dark)" oninput="qpUpdateTotal()"></div>' +
+    '<div class="field"><label>الكمية</label>' +
+      '<div class="stepper qp-stepper">' +
+        '<button class="minus" type="button" onclick="qpStep(-1)">−</button>' +
+        '<span class="st-qty" id="qpQty">1</span>' +
+        '<button type="button" onclick="qpStep(1)">+</button>' +
+      '</div></div>' +
+    '<div class="card" style="box-shadow:none;border:1px dashed var(--line);margin-bottom:12px">' +
+      '<div class="total-line grand"><span>المجموع</span><b class="ltr" id="qpTotal">' + money(0) + '</b></div>' +
+    '</div>' +
+    '<button class="btn block" onclick="quickPriceAdd()">إضافة للسلة ✓</button>' +
+    '<button class="btn block ghost" style="margin-top:8px" onclick="closeModal();openProductPicker()">أو اختر منتجاً من قائمة المخزون</button>'
+  );
+  setTimeout(function(){ var el = $('#qpPrice'); if(el) el.focus(); }, 250);
+}
+
+function qpStep(d){
+  QP_QTY = Math.max(1, QP_QTY + d);
+  var el = $('#qpQty');
+  if(el) el.textContent = QP_QTY;
+  qpUpdateTotal();
+}
+
+function qpUpdateTotal(){
+  var el = $('#qpTotal');
+  if(!el) return;
+  var price = Number($('#qpPrice') ? $('#qpPrice').value : 0) || 0;
+  el.textContent = money(price * QP_QTY);
+}
+
+function quickPriceAdd(){
+  var nameEl = $('#qpName'), priceEl = $('#qpPrice');
+  if(!priceEl) return;
+  var name = nameEl ? nameEl.value.trim() : '';
+  var price = Number(priceEl.value);
+  if(isNaN(price) || price <= 0){
+    beepErr(); toast('أدخل سعراً صحيحاً أولاً', 'err');
+    priceEl.focus();
+    return;
+  }
+  if(!state.openSeq) state.openSeq = 0;
+  state.openSeq++;
+  var pid = -state.openSeq; /* معرّف سالب فريد — لا يتعارض مع منتجات المخزون */
+  db.cart.push({ productId: pid, name: name || 'صنف بدون باركود', price: price, qty: QP_QTY, open: true });
+  saveDB();
+  beepOk(); buzz(60);
+  renderCartOnly();
+  toast('أُضيف للسلة ✓ — يمكنك إضافة صنف آخر');
+  if(nameEl) nameEl.value = '';
+  priceEl.value = '';
+  QP_QTY = 1;
+  var qe = $('#qpQty'); if(qe) qe.textContent = '1';
+  qpUpdateTotal();
+  priceEl.focus();
 }
 
 /* ---------- بيع منتجات بدون باركود (اختيار من القائمة) ---------- */
@@ -1011,9 +1080,10 @@ function confirmSale(){
   var t = cartTotals();
   if(!db.cart.length){ toast('السلة فارغة', 'err'); return; }
 
-  /* التحقق النهائي من المخزون */
+  /* التحقق النهائي من المخزون (أسطر السعر المباشر معفاة) */
   for(var i = 0; i < db.cart.length; i++){
     var line = db.cart[i];
+    if(line.open === true) continue;
     var p = findProduct(line.productId);
     if(!p){ toast('منتج في السلة لم يعد موجوداً: ' + line.name, 'err'); return; }
     if(Number(line.qty) > (Number(p.qty) || 0)){
@@ -1026,8 +1096,9 @@ function confirmSale(){
   var paid = paidV === '' ? t.total : (Number(paidV) || 0);
   if(paid < t.total){ toast('المبلغ المدفوع أقل من المطلوب', 'err'); return; }
 
-  /* خصم المخزون + حركات */
+  /* خصم المخزون + حركات (أسطر السعر المباشر لا تخصم مخزوناً) */
   db.cart.forEach(function(line){
+    if(line.open === true) return;
     var p = findProduct(line.productId);
     p.qty = (Number(p.qty) || 0) - Number(line.qty);
     addMovement(p.id, 'out', line.qty, 'بيع ' + 'S-' + ('0000' + (db.seq.sale + 1)).slice(-4));
@@ -1037,7 +1108,7 @@ function confirmSale(){
   var sale = {
     id: sid,
     code: 'S-' + ('0000' + sid).slice(-4),
-    items: db.cart.map(function(l){ return { productId: l.productId, name: l.name, price: Number(l.price) || 0, qty: Number(l.qty) }; }),
+    items: db.cart.map(function(l){ return { productId: l.productId, name: l.name, price: Number(l.price) || 0, qty: Number(l.qty), open: l.open === true }; }),
     subtotal: t.sub,
     discount: t.disc,
     total: t.total,
@@ -1221,6 +1292,7 @@ function voidSale(id){
     function(){
       var lack = [];
       s.items.forEach(function(it){
+        if(it.open === true) return; /* سعر مباشر — لا مخزون يُستعاد */
         var p = findProduct(it.productId);
         if(p){
           p.qty = (Number(p.qty) || 0) + Number(it.qty);
@@ -1860,7 +1932,7 @@ function viewSettings(){
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
     '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، ونسخ احتياطي محلي.</p>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.4.0</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.5.0</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
     '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
