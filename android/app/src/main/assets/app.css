@@ -443,6 +443,10 @@ button:focus-visible{ outline:2px solid rgba(5,150,105,.45); outline-offset:2px;
 }
 .scan-btn:active{ transform:scale(.985); }
 .scan-btn svg{ flex:none; }
+.scan-actions{ display:flex; gap:8px; }
+.scan-actions .scan-btn{ flex:1; padding:12px 6px; font-size:13.5px; min-height:52px; gap:6px; }
+.scan-btn.alt{ background:rgba(255,255,255,.16); color:#fff; border:1.5px solid rgba(255,255,255,.4); box-shadow:none; }
+.scan-btn.alt:active{ background:rgba(255,255,255,.26); }
 .manual-row{ display:flex; gap:8px; margin-top:10px; }
 .manual-row input{
   flex:1; border:1.5px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12);
@@ -492,6 +496,36 @@ button:focus-visible{ outline:2px solid rgba(5,150,105,.45); outline-offset:2px;
 }
 .cart-empty h4{ margin:0 0 4px; color:#334155; font-size:15px; }
 .cart-empty p{ margin:0 0 14px; font-size:13px; }
+.ce-actions{ display:flex; gap:8px; justify-content:center; }
+.ce-actions .btn{ flex:1; max-width:170px; }
+
+/* ---------- منتقي المنتجات (بيع بدون باركود) ---------- */
+.pick-search input{
+  width:100%; border:1.5px solid var(--line); border-radius:14px;
+  padding:12px 14px; font-size:14px; font-family:inherit; color:#0F172A;
+  background:#F8FAFC; outline:none; box-sizing:border-box;
+  transition:border-color .18s ease, background .18s ease;
+}
+.pick-search input:focus{ border-color:var(--primary); background:#fff; }
+.pick-count{ font-size:11.5px; color:var(--muted); font-weight:700; margin:10px 2px 8px; }
+.pick-list{ max-height:46vh; overflow-y:auto; border-top:1px dashed var(--line); padding-top:6px; }
+.pick-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:11px 4px; border-bottom:1px solid #F1F5F9; cursor:pointer;
+  border-radius:10px; transition:background .14s ease;
+}
+.pick-row:active{ background:#ECFDF5; }
+.pick-row.dim{ opacity:.55; }
+.pr-name{ font-weight:800; font-size:13.5px; color:#0F172A; }
+.pr-meta{ font-size:11px; color:var(--muted); margin-top:2px; }
+.pr-side{ text-align:left; flex:none; }
+.pr-price{ font-weight:800; font-size:13.5px; color:var(--primary-dark); }
+.pick-badge{
+  display:inline-block; margin-top:3px; border-radius:7px;
+  padding:1px 7px; font-size:10px; font-weight:800;
+}
+.pick-badge.ok{ background:var(--green-bg); color:var(--green); }
+.pick-badge.out{ background:var(--red-bg); color:var(--red); }
 
 /* ---------- Checkout bar ---------- */
 .checkout-bar{
@@ -635,6 +669,7 @@ body.has-checkoutbar{ padding-bottom:calc(174px + env(safe-area-inset-bottom)); 
   border-radius:8px; padding:1px 8px;
   font-size:10.5px; font-weight:700; color:#475569;
 }
+.bc-chip.nobc{ border-style:dashed; color:var(--muted); font-weight:600; }
 .expiry-badge{
   display:inline-flex; align-items:center; gap:4px;
   border-radius:8px; padding:2px 8px; font-size:10.5px; font-weight:800;

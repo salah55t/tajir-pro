@@ -1,6 +1,6 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.3.1
+   تاجر برو — TajirPro v1.4.0
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
    + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
@@ -547,6 +547,7 @@ function viewDash(){
    ============================================================ */
 
 var SCAN_ICON_POS = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 012-2h2"/><path d="M17 3h2a2 2 0 012 2v2"/><path d="M21 17v2a2 2 0 01-2 2h-2"/><path d="M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>';
+var TAG_ICON_POS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L13.4 20.6a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1"/></svg>';
 
 function showPosView(v){
   state.posView = v;
@@ -588,8 +589,11 @@ function viewPosCart(){
   var hero =
     '<div class="scan-hero">' +
       '<div class="sh-title">🛒 نقطة البيع السريعة</div>' +
-      '<div class="sh-sub">امسح باركود المنتج بالكاميرا — يُضاف للسلة ويُحتسب تلقائياً ويُخصم من المخزون</div>' +
-      '<button class="scan-btn" onclick="openScannerForCart()">' + SCAN_ICON_POS + ' مسح منتج بالكاميرا</button>' +
+      '<div class="sh-sub">امسح باركود المنتج بالكاميرا، أو اختر منتجاً بدون باركود من القائمة — يُضاف للسلة ويُحتسب تلقائياً ويُخصم من المخزون</div>' +
+      '<div class="scan-actions">' +
+        '<button class="scan-btn" onclick="openScannerForCart()">' + SCAN_ICON_POS + ' مسح باركود</button>' +
+        '<button class="scan-btn alt" onclick="openProductPicker()">' + TAG_ICON_POS + ' بدون باركود</button>' +
+      '</div>' +
       '<div class="manual-row">' +
         '<input id="posManual" type="text" inputmode="numeric" placeholder="أو أدخل رقم الباركود يدوياً..." >' +
         '<button onclick="posManualAdd()">إضافة</button>' +
@@ -602,8 +606,11 @@ function viewPosCart(){
   }else{
     cartHtml = '<div class="card"><div class="cart-empty">' +
       '<div class="ce-icon">' + SCAN_ICON_POS + '</div>' +
-      '<h4>السلة فارغة</h4><p>امسح أول منتج بالكاميرا أو أدخل الباركود يدوياً لبدء عملية البيع</p>' +
-      '<button class="btn" onclick="openScannerForCart()">فتح القارئ</button></div></div>';
+      '<h4>السلة فارغة</h4><p>امسح أول منتج بالكاميرا، أو أدخل الباركود يدوياً، أو اختر منتجاً بدون باركود من القائمة</p>' +
+      '<div class="ce-actions">' +
+        '<button class="btn" onclick="openScannerForCart()">فتح القارئ</button>' +
+        '<button class="btn ghost" onclick="openProductPicker()">بيع بدون باركود</button>' +
+      '</div></div></div>';
   }
 
   var totals =
@@ -667,7 +674,10 @@ function renderCartOnly(flashProductId){
     '<div class="card"><div class="cart-empty">' +
       '<div class="ce-icon">' + SCAN_ICON_POS + '</div>' +
       '<h4>السلة فارغة</h4><p>امسح أول منتج بالكاميرا لبدء عملية البيع</p>' +
-      '<button class="btn" onclick="openScannerForCart()">فتح القارئ</button></div></div>';
+      '<div class="ce-actions">' +
+        '<button class="btn" onclick="openScannerForCart()">فتح القارئ</button>' +
+        '<button class="btn ghost" onclick="openProductPicker()">بيع بدون باركود</button>' +
+      '</div></div></div>';
 
   var cc = $('#cartCount');
   if(cc) cc.textContent = t.count + ' صنف • ' + t.units + ' وحدة';
@@ -788,6 +798,66 @@ function posManualAdd(){
   if(!v){ toast('أدخل رقم الباركود أولاً', 'err'); return; }
   el.value = '';
   posScanCode(v);
+}
+
+/* ---------- بيع منتجات بدون باركود (اختيار من القائمة) ---------- */
+var PICK_Q = '';
+
+function openProductPicker(){
+  PICK_Q = '';
+  openModal(
+    sheetHead('بيع منتج بدون باركود') +
+    '<div class="pick-search">' +
+      '<input id="pickQ" type="text" placeholder="🔍 ابحث بالاسم أو التصنيف..." oninput="PICK_Q=this.value;renderPickerList()" onfocus="this.select()">' +
+    '</div>' +
+    '<div class="pick-count" id="pickCount"></div>' +
+    '<div class="pick-list" id="pickList"></div>' +
+    '<button class="btn block ghost" style="margin-top:12px" onclick="closeModal();showTab(\'pos\')">الرجوع إلى السلة 🛒</button>'
+  );
+  renderPickerList();
+}
+
+function pickerMatches(p){
+  if(!PICK_Q) return true;
+  var q = PICK_Q.toLowerCase();
+  return (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+         (p.category || '').toLowerCase().indexOf(q) !== -1 ||
+         (p.barcode ? String(p.barcode).indexOf(q) !== -1 : false);
+}
+
+function renderPickerList(){
+  var box = $('#pickList');
+  if(!box) return;
+  var list = db.products.filter(pickerMatches);
+  var cc = $('#pickCount');
+  if(cc) cc.textContent = list.length + ' منتج — اضغط على المنتج لإضافته للسلة';
+  if(!list.length){
+    box.innerHTML = '<div class="empty" style="padding:24px 10px">' +
+      '<h4>لا نتائج</h4><p>لم يتم العثور على منتجات مطابقة</p>' +
+      '<button class="btn" onclick="closeModal();openProductModal()">إضافة منتج جديد</button></div>';
+    return;
+  }
+  box.innerHTML = list.map(function(p){
+    var stock = Number(p.qty) || 0;
+    var badge = stock <= 0
+      ? '<span class="pick-badge out">نفدت</span>'
+      : '<span class="pick-badge ok">متوفر: ' + stock + '</span>';
+    return '<div class="pick-row' + (stock <= 0 ? ' dim' : '') + '" onclick="pickAdd(' + p.id + ')">' +
+      '<div class="pr-main">' +
+        '<div class="pr-name">' + esc(p.name) + '</div>' +
+        '<div class="pr-meta">' + esc(p.category || 'بدون تصنيف') + '</div>' +
+      '</div>' +
+      '<div class="pr-side">' +
+        '<div class="pr-price ltr">' + money(p.price) + '</div>' +
+        badge +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function pickAdd(id){
+  addToCart(id, { quiet:true });
+  renderPickerList();
 }
 
 function openScannerForCart(){
@@ -1449,7 +1519,7 @@ function productCards(list){
             (p.cost != null && p.cost !== '' ? '<span>تكلفة: <b class="ltr">' + money(p.cost) + '</b></span>' : '') +
           '</div>' +
           '<div class="row-sub" style="margin-top:5px">' +
-            (p.barcode ? '<span class="bc-chip ltr">▦ ' + esc(p.barcode) + '</span>' : '') +
+            (p.barcode ? '<span class="bc-chip ltr">▦ ' + esc(p.barcode) + '</span>' : '<span class="bc-chip nobc">بدون باركود</span>') +
             (es ? '<span class="expiry-badge ' + es.cls + '">' + esc(es.label) + '</span>' : '') +
           '</div>' +
         '</div>' +
@@ -1546,7 +1616,7 @@ function openProductModal(id, presetBarcode){
     '<div class="form-error" id="prodErr"></div>' +
     '<div class="field"><label>اسم المنتج *</label>' +
       '<input id="fName" type="text" value="' + esc(p.name) + '" placeholder="مثال: سكر أبيض 1كغ"></div>' +
-    '<div class="field"><label>الباركود <span style="font-weight:400;color:var(--muted)">(امسحه بالكاميرا أو أدخله)</span></label>' +
+    '<div class="field"><label>الباركود <span style="font-weight:400;color:var(--muted)">(اختياري — اتركه فارغاً للمنتجات بدون باركود)</span></label>' +
       '<div class="scan-field">' +
         '<input id="fBc" type="text" inputmode="numeric" value="' + esc(p.barcode || '') + '" placeholder="مثال: 6130001000015" style="direction:ltr;text-align:right">' +
         '<button class="cam-btn" type="button" onclick="scanToField(\'fBc\')" title="مسح بالكاميرا">' +
@@ -1790,7 +1860,7 @@ function viewSettings(){
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
     '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، ونسخ احتياطي محلي.</p>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.3.1</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.4.0</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
     '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
