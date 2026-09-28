@@ -662,6 +662,108 @@ body.has-checkoutbar{ padding-bottom:calc(174px + env(safe-area-inset-bottom)); 
 /* toast فوق القارئ (القارئ z-index 300) */
 #toastRoot{ z-index:400; }
 
+/* ---------- v1.3.0 · كود التحقق من الفاتورة ---------- */
+.vcode-chip{
+  display:inline-flex; align-items:center; gap:7px; margin-top:8px;
+  padding:5px 12px; border-radius:9px; cursor:pointer;
+  background:linear-gradient(135deg,#ECFDF5,#D1FAE5);
+  border:1px dashed var(--primary); color:var(--primary-dark);
+  font-family:'SF Mono',Consolas,monospace; font-weight:800; font-size:13.5px;
+  letter-spacing:1.5px; transition:transform .15s ease, box-shadow .15s ease;
+}
+.vcode-chip:active{ transform:scale(.96); }
+.vcode-chip .vc-stripes{
+  width:26px; height:15px; flex:none; border-radius:2px;
+  background:repeating-linear-gradient(90deg,
+    var(--primary-dark) 0 2px, transparent 2px 4px,
+    var(--primary-dark) 4px 7px, transparent 7px 9px,
+    var(--primary-dark) 9px 10px, transparent 10px 13px);
+}
+.vcode-chip .vc-hint{
+  font-family:inherit; font-weight:700; font-size:10.5px; letter-spacing:0;
+  color:var(--muted); border-right:1px solid rgba(5,150,105,.25); padding-right:7px;
+}
+
+/* ---------- نتيجة التحقق: فاتورة أصلية / مرتجعة ---------- */
+.verdict{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  padding:20px 16px 18px; border-radius:18px; margin-bottom:14px; gap:4px;
+}
+.verdict.ok{
+  background:linear-gradient(145deg,#ECFDF5 0%,#D1FAE5 55%,#A7F3D0 100%);
+  border:1.5px solid var(--primary);
+  box-shadow:0 10px 30px -12px rgba(5,150,105,.45);
+}
+.verdict.bad{
+  background:linear-gradient(145deg,#FEF2F2 0%,#FEE2E2 55%,#FECACA 100%);
+  border:1.5px solid var(--red);
+  box-shadow:0 10px 30px -12px rgba(220,38,38,.45);
+}
+.verdict .v-icon{
+  width:58px; height:58px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  margin-bottom:6px; background:#fff;
+  box-shadow:0 4px 14px rgba(0,0,0,.12), 0 0 0 8px rgba(255,255,255,.45);
+}
+.verdict.ok .v-icon{ color:var(--primary-dark); }
+.verdict.bad .v-icon{ color:var(--red); }
+.verdict .v-title{ font-size:18px; font-weight:900; letter-spacing:-.2px; }
+.verdict.ok .v-title{ color:#065F46; }
+.verdict.bad .v-title{ color:#991B1B; }
+.verdict .v-sub{ font-size:12.5px; font-weight:600; color:#374151; max-width:280px; line-height:1.7; }
+.verdict-pop{ animation:verdictPop .45s cubic-bezier(.18,1.35,.4,1) both; }
+@keyframes verdictPop{
+  0%{ opacity:0; transform:scale(.55) translateY(14px); }
+  60%{ opacity:1; transform:scale(1.06) translateY(-2px); }
+  100%{ opacity:1; transform:scale(1) translateY(0); }
+}
+
+/* ---------- شاشة التحقق ---------- */
+.verify-hero{
+  background:linear-gradient(150deg,#065F46 0%,#047857 45%,#059669 100%);
+}
+.ver-stats{
+  margin-top:12px; font-size:12px; font-weight:700; color:rgba(255,255,255,.85);
+  background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
+  border-radius:11px; padding:8px 12px; backdrop-filter:blur(4px);
+}
+.ver-stats b{ color:#fff; }
+
+/* ---------- الطابعة الحرارية: الحالة والأجهزة ---------- */
+.printer-status{
+  display:flex; align-items:center; gap:9px;
+  padding:11px 13px; margin-bottom:12px; border-radius:13px;
+  background:var(--muted-bg,#F4F6F5); border:1px solid var(--line);
+  font-size:13px; font-weight:700; color:var(--ink,#1F2937);
+}
+.p-led{
+  width:10px; height:10px; border-radius:50%; flex:none;
+  background:#9CA3AF; box-shadow:none;
+}
+.p-led.on{
+  background:var(--green,#10B981);
+  box-shadow:0 0 0 4px rgba(16,185,129,.18);
+  animation:ledPulse 1.8s ease-in-out infinite;
+}
+@keyframes ledPulse{
+  0%,100%{ box-shadow:0 0 0 3px rgba(16,185,129,.22); }
+  50%{ box-shadow:0 0 0 7px rgba(16,185,129,.08); }
+}
+.printer-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  width:100%; text-align:right; padding:13px 14px; margin-bottom:8px;
+  border-radius:14px; border:1.5px solid var(--line); background:#fff;
+  cursor:pointer; transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.printer-row:hover{ border-color:var(--primary); }
+.printer-row:active{ transform:scale(.98); }
+.printer-row.connected{
+  background:var(--primary-light); border-color:var(--primary);
+  cursor:default;
+}
+.printer-row .pr-name{ font-size:14px; font-weight:800; color:var(--ink,#1F2937); }
+.printer-row .pr-addr{ font-size:11.5px; color:var(--muted); font-family:monospace; }
+
 /* ---------- تقليل الحركة لمن يفضل ذلك ---------- */
 @media (prefers-reduced-motion:reduce){
   *, *::before, *::after{

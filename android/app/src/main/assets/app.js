@@ -1,7 +1,8 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.2.0
+   تاجر برو — TajirPro v1.3.0
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
+   + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
    ============================================================ */
 
@@ -50,10 +51,14 @@ function defaults(){
     settings: {
       storeName: 'تاجر برو',
       currency: 'د.ج',
+      storePhone: '',
       lowStockDefault: 5,
       expiryWarnDays: 30,
       scanSound: true,
-      scanVibrate: true
+      scanVibrate: true,
+      printerWidthMm: 58,
+      printerName: '',
+      printerAddr: ''
     },
     products: [],
     movements: [],
@@ -72,7 +77,7 @@ function loadDB(){
   var d = defaults();
   if(!db.settings) db.settings = d.settings;
   /* ترحيل الإعدادات الجديدة دون فقدان الإعدادات القديمة */
-  ['expiryWarnDays','scanSound','scanVibrate'].forEach(function(k){
+  ['expiryWarnDays','scanSound','scanVibrate','storePhone','printerWidthMm','printerName','printerAddr'].forEach(function(k){
     if(db.settings[k] === undefined) db.settings[k] = d.settings[k];
   });
   if(!db.seq) db.seq = d.seq;
@@ -95,12 +100,45 @@ function loadDB(){
     if(p.barcode === undefined) p.barcode = '';
     if(p.expiry === undefined) p.expiry = '';
   });
+  /* ترحيل الفواتير القديمة: توليد كود تحقق لكل فاتورة (للطباعة ومنع الاحتيال) */
+  var verMigrated = false;
+  db.sales.forEach(function(s){
+    if(!s.verCode){ s.verCode = makeVerCode(s); verMigrated = true; }
+  });
+  if(verMigrated) saveDB();
 }
 function saveDB(){
   try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
   catch(e){ toast('تعذر حفظ البيانات محلياً', 'err'); }
 }
 function nextId(kind){ db.seq[kind] = (db.seq[kind] || 0) + 1; return db.seq[kind]; }
+
+/* ---------- كود التحقق لكل فاتورة (ضد الاحتيال) ---------- */
+function padNum(n, w){
+  var s = String(n);
+  while(s.length < w) s = '0' + s;
+  return s;
+}
+function verChecksum(sale){
+  var s = (db.settings.storeName || '') + '|' + sale.id + '|' + sale.total + '|' + sale.createdAt;
+  var h = 7;
+  for(var i = 0; i < s.length; i++){ h = ((h * 131) + s.charCodeAt(i)) & 0xFFFFFF; }
+  return ('0' + (h % 97)).slice(-2) + String.fromCharCode(65 + (h % 26));
+}
+function makeVerCode(sale){
+  return 'TJ-' + padNum(sale.id, 4) + '-' + verChecksum(sale);
+}
+function normCode(c){
+  return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+function findSaleByVerCode(code){
+  var n = normCode(code);
+  if(!n) return null;
+  for(var i = 0; i < db.sales.length; i++){
+    if(normCode(db.sales[i].verCode) === n) return db.sales[i];
+  }
+  return null;
+}
 
 function seedIfEmpty(){
   if(db.seeded) return;
@@ -516,10 +554,11 @@ function showPosView(v){
 
 function viewPos(){
   return '<div class="pos-tabs">' +
-    '<button class="btn ' + (state.posView === 'cart' ? 'on' : 'ghost') + '" onclick="showPosView(\'cart\')">🛒 بيع جديد</button>' +
-    '<button class="btn ' + (state.posView === 'history' ? 'on' : 'ghost') + '" onclick="showPosView(\'history\')">📋 سجل المبيعات</button>' +
+    '<button class="btn ' + (state.posView === 'cart' ? 'on' : 'ghost') + '" onclick="showPosView(\'cart\')">🛒 بيع</button>' +
+    '<button class="btn ' + (state.posView === 'history' ? 'on' : 'ghost') + '" onclick="showPosView(\'history\')">📋 السجل</button>' +
+    '<button class="btn ' + (state.posView === 'verify' ? 'on' : 'ghost') + '" onclick="showPosView(\'verify\')">✅ تحقق من فاتورة</button>' +
   '</div>' +
-  (state.posView === 'history' ? viewSalesHistory() : viewPosCart());
+  (state.posView === 'history' ? viewSalesHistory() : (state.posView === 'verify' ? viewVerify() : viewPosCart()));
 }
 
 /* ---------- السلة ---------- */
@@ -709,6 +748,14 @@ function posRemove(id){
 function posScanCode(code){
   code = String(code).trim();
   if(!code) return;
+  /* كود فاتورة؟ ← عرض نتيجة التحقق (ضد الاحتيال) */
+  var sale = findSaleByVerCode(code);
+  if(sale){
+    beepOk(); buzz([60, 60, 60]);
+    closeScanner();
+    openVerifyModal(sale);
+    return;
+  }
   var p = findByBarcode(code);
   if(!p){
     beepErr(); buzz([70, 50, 70]);
@@ -748,6 +795,86 @@ function openScannerForCart(){
     title: 'مسح منتج للسلة',
     hint: 'امسح المنتجات واحداً تلو الآخر — تُضاف تلقائياً للسلة'
   });
+}
+
+/* ---------- التحقق من الفواتير (ضد الاحتيال) ---------- */
+var SHIELD_SVG = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3.5v5.2c0 4.6-3.2 8-8 9.3-4.8-1.3-8-4.7-8-9.3V6.5z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg>';
+
+function viewVerify(){
+  return '<div class="scan-hero verify-hero">' +
+    '<div class="sh-title">🛡️ التحقق من الفواتير</div>' +
+    '<div class="sh-sub">امسح رمز QR أو الكود المطبوع أسفل الفاتورة الحرارية — يعرض التطبيق الفاتورة المخزنة للتأكد من صحتها ومنع الاحتيال</div>' +
+    '<button class="scan-btn" onclick="openScannerForVerify()">' + SHIELD_SVG + ' مسح كود الفاتورة بالكاميرا</button>' +
+    '<div class="manual-row">' +
+      '<input id="verManual" type="text" placeholder="أو أدخل كود الفاتورة يدوياً… مثال: TJ-0001-58K">' +
+      '<button onclick="verifyManual()">تحقق</button>' +
+    '</div>' +
+    '<div class="ver-stats">عدد الفواتير المحفوظة: <b>' + db.sales.length + '</b></div>' +
+  '</div>' +
+  '<div class="card">' +
+    '<div class="card-title">🔐 كيف يمنع التحقق الاحتيال؟</div>' +
+    '<div class="about-line"><span>كل فاتورة</span><b>لها كود تحقق فريد لا يتكرر</b></div>' +
+    '<div class="about-line"><span>عند المسح</span><b>تُعرض الفاتورة المخزنة فعلياً</b></div>' +
+    '<div class="about-line"><span>فاتورة مزيفة</span><b>لن تطابق أي كود محفوظ</b></div>' +
+    '<div class="about-line"><span>فاتورة مرتجعة</span><b>يظهر عليها تحذير أحمر واضح</b></div>' +
+  '</div>';
+}
+function verifyManual(){
+  var el = $('#verManual');
+  if(!el) return;
+  var v = el.value.trim();
+  if(!v){ toast('أدخل كود الفاتورة أولاً', 'err'); return; }
+  el.value = '';
+  verifyCode(v);
+}
+function openScannerForVerify(){
+  state.posView = 'verify';
+  openScanner(function(code){ verifyCode(code); }, {
+    title: 'التحقق من فاتورة',
+    hint: 'امسح رمز QR أو الكود المطبوع أسفل الفاتورة'
+  });
+}
+function verifyCode(code){
+  var sale = findSaleByVerCode(code);
+  closeScanner();
+  if(sale){
+    beepOk(); buzz([60, 60, 60]);
+    openVerifyModal(sale);
+  }else{
+    beepErr(); buzz([70, 50, 70]);
+    openUnknownCodeDialog(code);
+  }
+}
+function openVerifyModal(sale){
+  var valid = !sale.voided;
+  openModal(
+    sheetHead('نتيجة التحقق من الفاتورة') +
+    '<div class="verdict ' + (valid ? 'ok' : 'bad') + ' verdict-pop">' +
+      '<div class="v-icon">' +
+        (valid
+          ? '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+          : '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>') +
+      '</div>' +
+      '<div class="v-title">' + (valid ? 'فاتورة أصلية ✓' : 'تحذير: فاتورة مرتجعة') + '</div>' +
+      '<div class="v-sub">' + (valid ? 'هذه الفاتورة مسجلة فعلياً في هذا المتجر' : 'تم إرجاع هذه الفاتورة — الكميات أُعيدت للمخزون وليست عملية بيع سارية') + '</div>' +
+    '</div>' +
+    '<div class="receipt">' + receiptHtml(sale) + '</div>' +
+    '<div class="btn-row" style="margin-top:12px">' +
+      '<button class="btn" onclick="printSale(' + sale.id + ')">🖨️ طباعة</button>' +
+      '<button class="btn ghost" onclick="closeModal()">إغلاق</button>' +
+    '</div>'
+  );
+}
+function openUnknownCodeDialog(code){
+  openDialog(
+    '<div class="d-icon" style="background:var(--red-bg);color:var(--red)">' +
+      '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></div>' +
+    '<h3>رمز غير معروف ⚠</h3>' +
+    '<p>الكود <b class="ltr">' + esc(code) + '</b> لا يطابق أي فاتورة محفوظة في هذا المتجر.<br>قد يكون رمزاً مزيفاً أو من متجر آخر — لا تعتبره فاتورة صحيحة.</p>' +
+    '<div class="dialog-actions">' +
+      '<button class="btn ghost" onclick="closeModal()">حسناً</button>' +
+    '</div>'
+  );
 }
 
 /* ---------- الدفع والإيصال ---------- */
@@ -848,6 +975,7 @@ function confirmSale(){
     createdAt: new Date().toISOString(),
     voided: false
   };
+  sale.verCode = makeVerCode(sale);
   db.sales.unshift(sale);
   if(db.sales.length > 2000) db.sales.length = 2000;
   db.cart = [];
@@ -868,6 +996,7 @@ function receiptHtml(sale){
   return '<div class="receipt-head">' +
       '<div class="r-store">' + esc(db.settings.storeName) + '</div>' +
       '<div class="r-code ltr">' + esc(sale.code) + ' • ' + fmtDate(sale.createdAt) + '</div>' +
+      (sale.verCode ? '<div class="vcode-chip ltr" onclick="copyText(\'' + sale.verCode + '\')"><span class="vc-stripes"></span>' + esc(sale.verCode) + '<span class="vc-hint">كود التحقق</span></div>' : '') +
     '</div>' +
     rows +
     '<div class="total-line" style="margin-top:6px"><span>المجموع الفرعي</span><b class="ltr">' + money(sale.subtotal) + '</b></div>' +
@@ -887,8 +1016,9 @@ function showReceiptModal(sale, isNew){
     sheetHead(isNew ? 'تم البيع بنجاح ✓' : 'البيع ' + sale.code) +
     '<div class="receipt">' + receiptHtml(sale) + '</div>' +
     '<div class="btn-row" style="margin-top:12px">' +
-      '<button class="btn outline" onclick="shareReceipt(' + sale.id + ')">📤 مشاركة الإيصال</button>' +
-      '<button class="btn" onclick="closeModal()">بيع جديد</button>' +
+      '<button class="btn" onclick="printSale(' + sale.id + ')">🖨️ طباعة</button>' +
+      '<button class="btn outline" onclick="shareReceipt(' + sale.id + ')">📤 مشاركة</button>' +
+      '<button class="btn ghost" onclick="closeModal()">بيع جديد</button>' +
     '</div>'
   );
 }
@@ -1003,6 +1133,7 @@ function showSaleDetails(id){
     sheetHead('البيع ' + s.code) +
     '<div class="receipt">' + receiptHtml(s) + '</div>' +
     '<div class="btn-row" style="margin-top:12px">' +
+      '<button class="btn" onclick="printSale(' + s.id + ')">🖨️ طباعة</button>' +
       '<button class="btn outline" onclick="shareReceipt(' + s.id + ')">📤 مشاركة</button>' +
       (s.voided
         ? '<button class="btn ghost" onclick="closeModal()">إغلاق</button>'
@@ -1605,6 +1736,8 @@ function viewSettings(){
   '<div class="card">' +
     '<div class="card-title">🏪 معلومات المتجر</div>' +
     '<div class="field"><label>اسم المتجر</label><input id="setStore" type="text" value="' + esc(db.settings.storeName) + '"></div>' +
+    '<div class="field"><label>هاتف المتجر <span style="font-weight:400;color:var(--muted)">(يظهر على الفاتورة المطبوعة)</span></label>' +
+      '<input id="setPhone" type="tel" inputmode="tel" value="' + esc(db.settings.storePhone || '') + '" placeholder="مثال: 0555 12 34 56" style="direction:ltr;text-align:right"></div>' +
     '<div class="form-grid">' +
       '<div class="field"><label>العملة</label><input id="setCurr" type="text" value="' + esc(db.settings.currency) + '" placeholder="د.ج / ر.س / درهم"></div>' +
       '<div class="field"><label>حد التنبيه الافتراضي</label><input id="setLow" type="number" inputmode="numeric" min="0" value="' + esc(db.settings.lowStockDefault) + '"></div>' +
@@ -1624,6 +1757,22 @@ function viewSettings(){
   '</div>' +
 
   '<div class="card">' +
+    '<div class="card-title">🖨️ الطابعة الحرارية (بلوتوث)</div>' +
+    '<div class="printer-status"><span class="p-led ' + (pbConnected() ? 'on' : '') + '"></span>' +
+      '<span>' + (pbConnected() ? 'متصل: ' + esc(db.settings.printerName || 'الطابعة') : 'غير متصل — اختر طابعتك لبدء طباعة الفواتير') + '</span></div>' +
+    '<div class="field" style="margin-bottom:8px"><label>مقاس ورق الطابعة</label><div class="chips">' +
+      '<button class="chip ' + ((Number(db.settings.printerWidthMm) || 58) === 58 ? 'active' : '') + '" onclick="savePrinterWidth(58)">58 مم</button>' +
+      '<button class="chip ' + ((Number(db.settings.printerWidthMm) || 58) === 80 ? 'active' : '') + '" onclick="savePrinterWidth(80)">80 مم</button>' +
+    '</div></div>' +
+    '<div class="btn-row">' +
+      '<button class="btn sm" onclick="openPrinterPicker()">📱 اختيار الطابعة</button>' +
+      '<button class="btn sm outline" onclick="printTestPage()">🖨️ طباعة تجريبية</button>' +
+      (pbConnected() ? '<button class="btn sm danger" onclick="pbDisconnect()">فصل</button>' : '') +
+    '</div>' +
+    '<div class="small-note" style="font-size:11.5px;color:var(--muted);margin-top:10px">💡 اربط الطابعة الحرارية ببلوتوث الهاتف من إعدادات النظام أولاً. بعد كل بيع يظهر زر «طباعة» في الفاتورة مباشرة، وتُطبع باسم المتجر مع رمز QR خاص بالفاتورة للتحقق ومنع الاحتيال.</div>' +
+  '</div>' +
+
+  '<div class="card">' +
     '<div class="card-title">💾 البيانات والنسخ الاحتياطي</div>' +
     '<div class="btn-row">' +
       '<button class="btn sm outline" onclick="openExportJSON()">تصدير نسخة كاملة</button>' +
@@ -1639,9 +1788,11 @@ function viewSettings(){
   '<div class="card">' +
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.2.0</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.3.0</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
+    '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
+    '<div class="about-line"><span>التحقق</span><b>رمز QR وكود فريد لكل فاتورة</b></div>' +
     '<div class="about-line"><span>التنبيهات</span><b>نفاذ المخزون وانتهاء الصلاحية</b></div>' +
   '</div>';
 }
@@ -1653,6 +1804,7 @@ function saveStoreInfo(){
   var exp = Number($('#setExp').value);
   if(!name){ toast('أدخل اسم المتجر', 'err'); return; }
   db.settings.storeName = name;
+  db.settings.storePhone = $('#setPhone') ? $('#setPhone').value.trim() : '';
   db.settings.currency = curr || 'د.ج';
   db.settings.lowStockDefault = isNaN(low) ? 5 : Math.max(0, low);
   db.settings.expiryWarnDays = (isNaN(exp) || exp < 1) ? 30 : Math.round(exp);
@@ -1669,6 +1821,177 @@ function saveScannerSettings(){
   if(s2) db.settings.scanVibrate = s2.checked;
   saveDB();
   toast('تم حفظ إعدادات القارئ ✓');
+}
+
+/* ---------- الطباعة الحرارية عبر البلوتوث (ESC/POS) ---------- */
+var _pbPending = null;
+
+function pbAvailable(){
+  return typeof TajirPrintBridge !== 'undefined';
+}
+function pbConnected(){
+  try{ return pbAvailable() && TajirPrintBridge.isConnected && TajirPrintBridge.isConnected(); }
+  catch(e){ return false; }
+}
+
+/* أحداث الجسر الأصلي: اتصال / فصل / طباعة / أخطاء / صلاحيات */
+window.__printEvent = function(type, data){
+  try{
+    if(type === 'connected'){
+      db.settings.printerName = (data && data.name) || '';
+      db.settings.printerAddr = (data && data.address) || '';
+      saveDB();
+      toast('تم الاتصال بالطابعة ✓');
+      if(_pbPending){ var p = _pbPending; _pbPending = null; pbSend(p); }
+      else if(state.tab === 'settings') render();
+    }else if(type === 'disconnected'){
+      db.settings.printerName = '';
+      db.settings.printerAddr = '';
+      saveDB();
+      toast('تم فصل الطابعة');
+      if(state.tab === 'settings') render();
+    }else if(type === 'printed'){
+      toast('تمت الطباعة ✓');
+      buzz([40, 40, 40]);
+    }else if(type === 'error'){
+      toast((data && data.msg) || 'تعذر إكمال العملية', 'err');
+    }else if(type === 'permission'){
+      if(data && data.granted){
+        if(_pbPending){ var pp = _pbPending; _pbPending = null; pbPrintPayload(pp); }
+      }else{
+        _pbPending = null;
+        toast('لم تُمنح صلاحية البلوتوث', 'err');
+      }
+    }
+  }catch(e){}
+};
+
+function salePrintPayload(sale){
+  var d = new Date(sale.createdAt);
+  var dateText = padNum(d.getDate(), 2) + '-' + padNum(d.getMonth() + 1, 2) + '-' + d.getFullYear() +
+    ' ' + padNum(d.getHours(), 2) + ':' + padNum(d.getMinutes(), 2);
+  return {
+    storeName: db.settings.storeName || 'تاجر برو',
+    storePhone: db.settings.storePhone || '',
+    currency: db.settings.currency || '',
+    widthMm: Number(db.settings.printerWidthMm) || 58,
+    code: sale.verCode || sale.code || '',
+    dateText: dateText,
+    voided: !!sale.voided,
+    items: sale.items.map(function(it){
+      return { name: it.name, qty: Number(it.qty) || 0, price: Number(it.price) || 0, total: (Number(it.qty) || 0) * (Number(it.price) || 0) };
+    }),
+    subtotal: Number(sale.subtotal) || 0,
+    discount: Number(sale.discount) || 0,
+    total: Number(sale.total) || 0,
+    paid: Number(sale.paid) || 0,
+    change: Number(sale.change) || 0
+  };
+}
+
+function printSale(id){
+  var s = findSale(id);
+  if(!s) return;
+  pbPrintPayload(salePrintPayload(s));
+}
+
+function printTestPage(){
+  var d = new Date();
+  pbPrintPayload({
+    storeName: db.settings.storeName || 'تاجر برو',
+    storePhone: db.settings.storePhone || '',
+    currency: db.settings.currency || '',
+    widthMm: Number(db.settings.printerWidthMm) || 58,
+    code: 'TJ-TEST-00X',
+    dateText: padNum(d.getDate(), 2) + '-' + padNum(d.getMonth() + 1, 2) + '-' + d.getFullYear(),
+    voided: false,
+    items: [
+      { name: 'طباعة تجريبية — سطر أول', qty: 2, price: 125, total: 250 },
+      { name: 'منتج تجريبي للتأكد من جودة الطباعة العربية والرمز', qty: 1, price: 999.5, total: 999.5 }
+    ],
+    subtotal: 1249.5,
+    discount: 50,
+    total: 1199.5,
+    paid: 1200,
+    change: 0.5
+  });
+}
+
+function pbPrintPayload(payload){
+  if(!pbAvailable()){
+    toast('الطباعة تعمل داخل تطبيق أندرويد فقط', 'err');
+    return;
+  }
+  try{
+    if(!TajirPrintBridge.hasPermission()){
+      _pbPending = payload;
+      TajirPrintBridge.requestPermission();
+      toast('امنح صلاحية البلوتوث لإكمال الطباعة');
+      return;
+    }
+    if(!pbConnected()){
+      _pbPending = payload;
+      openPrinterPicker();
+      return;
+    }
+    pbSend(payload);
+  }catch(e){ toast('تعذر بدء الطباعة', 'err'); }
+}
+
+function pbSend(payload){
+  try{
+    TajirPrintBridge.print(JSON.stringify(payload));
+    toast('جارٍ إرسال الفاتورة للطابعة…');
+  }catch(e){ toast('فشل الإرسال إلى الطابعة', 'err'); }
+}
+
+function openPrinterPicker(){
+  if(!pbAvailable()){ toast('الطباعة متاحة داخل تطبيق أندرويد فقط', 'err'); return; }
+  var res;
+  try{ res = JSON.parse(TajirPrintBridge.getPairedDevices()); }catch(e){ res = null; }
+  if(!res || res.ok === false){
+    if(res && res.err === 'nobluetooth'){ toast('البلوتوث غير مدعوم على هذا الجهاز', 'err'); return; }
+    try{ TajirPrintBridge.requestPermission(); }catch(e){}
+    toast('امنح صلاحية البلوتوث ثم اختر الطابعة من جديد');
+    return;
+  }
+  var list = res.list || [];
+  var rows;
+  if(list.length){
+    rows = list.map(function(d){
+      return '<button class="printer-row" onclick="pbConnect(\'' + esc(d.address) + '\')">' +
+        '<span class="pr-name">' + esc(d.name) + '</span>' +
+        '<span class="pr-addr ltr">' + esc(d.address) + '</span>' +
+      '</button>';
+    }).join('');
+  }else{
+    rows = '<div class="sim-result">ℹ️ لا توجد أجهزة بلوتوث مقترنة.<br>اربط الطابعة الحرارية من إعدادات بلوتوث الهاتف أولاً، ثم أعد المحاولة.</div>';
+  }
+  var connectedHtml = pbConnected()
+    ? '<div class="printer-row connected"><span class="pr-name">✓ متصل الآن: ' + esc(db.settings.printerName || 'الطابعة') + '</span><button class="btn sm danger" onclick="pbDisconnect()">فصل</button></div>'
+    : '';
+  openModal(
+    sheetHead('اختيار الطابعة الحرارية') +
+    connectedHtml +
+    rows +
+    '<div class="small-note" style="margin-top:10px;color:var(--muted)">💡 يدعم التطبيق الطابعات الحرارية بلوتوث (ESC/POS) بمقاس 58mm و 80mm — تُطبع الفاتورة بالعربية مع رمز QR للتحقق.</div>'
+  );
+}
+
+function pbConnect(addr){
+  try{
+    toast('جارٍ الاتصال بالطابعة…');
+    TajirPrintBridge.connect(addr);
+  }catch(e){ toast('تعذر بدء الاتصال', 'err'); }
+}
+function pbDisconnect(){
+  try{ TajirPrintBridge.disconnect(); }catch(e){}
+}
+function savePrinterWidth(mm){
+  db.settings.printerWidthMm = mm;
+  saveDB();
+  render();
+  toast('مقاس الطباعة: ' + mm + 'mm ✓');
 }
 
 /* ---------- النسخ الاحتياطي ---------- */
