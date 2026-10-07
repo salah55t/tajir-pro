@@ -1,8 +1,9 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.5.1
+   تاجر برو — TajirPro v1.6.0
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
    + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
+   + وضع ليلي + لوحة تحكم برسوم بيانية
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
    ============================================================ */
 
@@ -40,6 +41,24 @@ function norm(s){
     .replace(/ى/g, 'ي')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/* ---------- الوضع الليلي / النهاري ---------- */
+var THEME_KEY = 'tajirpro_theme';
+function currentTheme(){ return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  try{ localStorage.setItem(THEME_KEY, t); }catch(e){}
+  var meta = document.querySelector('meta[name=theme-color]');
+  if(meta) meta.setAttribute('content', t === 'dark' ? '#0B1220' : '#047857');
+  var b = $('#themeBtn');
+  if(b){ b.classList.add('spin'); setTimeout(function(){ b.classList.remove('spin'); }, 360); }
+  if(typeof render === 'function' && db) render();
+}
+function toggleTheme(){
+  var next = currentTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  toast(next === 'dark' ? 'تم تفعيل الوضع الليلي 🌙' : 'تم تفعيل الوضع النهاري ☀️');
 }
 
 /* ---------- Database (localStorage) ---------- */
@@ -441,9 +460,13 @@ function render(){
 function computeStats(){
   var P = db.products;
   var today = todayStr();
+  var yKey = (function(){ var y = new Date(Date.now() - 86400000);
+    return y.getFullYear() + '-' + ('0'+(y.getMonth()+1)).slice(-2) + '-' + ('0'+y.getDate()).slice(-2); })();
   var weekAgo = Date.now() - 7 * 86400000;
+  var twoWeeksAgo = Date.now() - 14 * 86400000;
   var okSales = db.sales.filter(function(s){ return !s.voided; });
   var todaySales = okSales.filter(function(s){ return String(s.createdAt || '').slice(0, 10) === today; });
+  var ySales = okSales.filter(function(s){ return String(s.createdAt || '').slice(0, 10) === yKey; });
   var A = computeAlerts();
   var s = {
     products: P.length,
@@ -452,13 +475,30 @@ function computeStats(){
     low: P.filter(function(p){ return (Number(p.qty) || 0) <= minQtyOf(p); }),
     todaySalesCount: todaySales.length,
     todaySalesTotal: todaySales.reduce(function(a, s){ return a + (Number(s.total) || 0); }, 0),
+    yesterdayTotal: ySales.reduce(function(a, s){ return a + (Number(s.total) || 0); }, 0),
     weekSalesTotal: okSales.filter(function(s){ return new Date(s.createdAt).getTime() >= weekAgo; })
       .reduce(function(a, s){ return a + (Number(s.total) || 0); }, 0),
+    prevWeekTotal: okSales.filter(function(s){
+      var t = new Date(s.createdAt).getTime();
+      return t >= twoWeeksAgo && t < weekAgo;
+    }).reduce(function(a, s){ return a + (Number(s.total) || 0); }, 0),
     allSalesTotal: okSales.reduce(function(a, s){ return a + (Number(s.total) || 0); }, 0),
     salesCount: okSales.length,
     alerts: A
   };
   return s;
+}
+
+/* شارة اتجاه النمو: تقارن الفترة الحالية بالسابقة */
+function deltaBadge(cur, prev){
+  if(prev <= 0){
+    if(cur > 0) return '<span class="s-delta up">▲ جديد</span>';
+    return '<span class="s-delta flat">— لا مبيعات</span>';
+  }
+  var pct = Math.round(((cur - prev) / prev) * 100);
+  if(pct > 0) return '<span class="s-delta up">▲ ' + pct + '%</span>';
+  if(pct < 0) return '<span class="s-delta down">▼ ' + Math.abs(pct) + '%</span>';
+  return '<span class="s-delta flat">= بدون تغيير</span>';
 }
 
 function statCard(iconSvg, iconBg, iconColor, val, label, opts){
@@ -468,6 +508,7 @@ function statCard(iconSvg, iconBg, iconColor, val, label, opts){
     '<div class="s-icon" style="background:' + iconBg + ';color:' + iconColor + '">' + iconSvg + '</div>' +
     '<div class="s-val">' + esc(val) + '</div>' +
     '<div class="s-label">' + esc(label) + '</div>' +
+    (opts.delta ? opts.delta : '') +
   '</div>';
 }
 
@@ -478,6 +519,101 @@ function alertBannerHtml(cls, iconSvg, title, sub, count, onclickFn){
       '<div class="ab-sub">' + esc(sub) + '</div></div>' +
     '<div class="ab-count">' + count + '</div>' +
   '</div>';
+}
+
+/* ============================================================
+   رسوم بيانية خفيفة (SVG بدون مكتبات) — تعمل بدون إنترنت
+   ============================================================ */
+
+/* سلسلة مبيعات آخر 7 أيام (تُحسب من الفواتير غير المرتجعة) */
+function salesSeries(days){
+  days = days || 7;
+  var out = [];
+  var labels = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  var ok = db.sales.filter(function(s){ return !s.voided; });
+  for(var i = days - 1; i >= 0; i--){
+    var d = new Date(Date.now() - i * 86400000);
+    var key = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+    var daySales = ok.filter(function(s){ return String(s.createdAt || '').slice(0,10) === key; });
+    out.push({
+      key: key,
+      label: i === 0 ? 'اليوم' : labels[d.getDay()],
+      total: daySales.reduce(function(a, s){ return a + (Number(s.total) || 0); }, 0),
+      count: daySales.length
+    });
+  }
+  return out;
+}
+
+/* مخطط مساحة/خط لمبيعات آخر 7 أيام */
+function lineChartHtml(series){
+  var W = 300, H = 132, padX = 6, padTop = 14, padBot = 10;
+  var max = Math.max.apply(null, series.map(function(p){ return p.total; }).concat([0]));
+  if(max <= 0) max = 1;
+  var innerW = W - padX * 2;
+  var innerH = H - padTop - padBot;
+  var step = series.length > 1 ? innerW / (series.length - 1) : innerW;
+  var pts = series.map(function(p, i){
+    var x = padX + step * i;
+    var y = padTop + innerH - (p.total / max) * innerH;
+    return { x: x, y: y, p: p };
+  });
+  var line = pts.map(function(o, i){ return (i ? 'L' : 'M') + o.x.toFixed(1) + ' ' + o.y.toFixed(1); }).join(' ');
+  var area = line + ' L' + pts[pts.length-1].x.toFixed(1) + ' ' + (padTop + innerH) +
+             ' L' + pts[0].x.toFixed(1) + ' ' + (padTop + innerH) + ' Z';
+  var grid = '';
+  for(var g = 0; g <= 2; g++){
+    var gy = padTop + (innerH / 2) * g;
+    grid += '<line class="lc-grid" x1="' + padX + '" y1="' + gy.toFixed(1) + '" x2="' + (W-padX) + '" y2="' + gy.toFixed(1) + '"/>';
+  }
+  var dots = pts.map(function(o){
+    return '<circle class="lc-dot" cx="' + o.x.toFixed(1) + '" cy="' + o.y.toFixed(1) + '" r="3.4" style="stroke:var(--primary)"/>';
+  }).join('');
+  var labels = '<div class="chart-labels">' + series.map(function(p, i){
+    return '<span class="' + (i === series.length - 1 ? 'today' : '') + '">' + esc(p.label) + '</span>';
+  }).join('') + '</div>';
+
+  return '<svg class="line-chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<defs><linearGradient id="lcg" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="var(--primary)" stop-opacity=".38"/>' +
+      '<stop offset="100%" stop-color="var(--primary)" stop-opacity="0"/>' +
+    '</linearGradient></defs>' +
+    grid +
+    '<path class="lc-area" d="' + area + '" fill="url(#lcg)"/>' +
+    '<path class="lc-line" d="' + line + '" stroke="var(--primary)"/>' +
+    dots +
+  '</svg>' + labels;
+}
+
+/* أفضل المنتجات مبيعاً (بالكمية) من الفواتير غير المرتجعة */
+function topProducts(limit){
+  limit = limit || 4;
+  var map = {};
+  db.sales.forEach(function(s){
+    if(s.voided) return;
+    (s.items || []).forEach(function(it){
+      var k = it.name;
+      if(!map[k]) map[k] = { name: k, qty: 0, revenue: 0 };
+      map[k].qty += Number(it.qty) || 0;
+      map[k].revenue += (Number(it.price) || 0) * (Number(it.qty) || 0);
+    });
+  });
+  var arr = Object.keys(map).map(function(k){ return map[k]; });
+  arr.sort(function(a, b){ return b.qty - a.qty; });
+  return arr.slice(0, limit);
+}
+
+function barListHtml(items){
+  if(!items.length) return '<div class="chart-empty">لا توجد مبيعات بعد لعرض الأكثر مبيعاً</div>';
+  var max = Math.max.apply(null, items.map(function(i){ return i.qty; })) || 1;
+  return '<div class="bar-list">' + items.map(function(it, i){
+    var pct = Math.max(4, Math.round((it.qty / max) * 100));
+    return '<div class="bar-item">' +
+      '<div class="bi-top"><span class="bi-name">' + esc(it.name) + '</span>' +
+        '<span class="bi-val ltr">' + it.qty + ' وحدة • ' + money(it.revenue) + '</span></div>' +
+      '<div class="bar-track"><div class="bar-fill' + (i % 2 ? ' alt' : '') + '" style="width:' + pct + '%;animation-delay:' + (i * .06) + 's"></div></div>' +
+    '</div>';
+  }).join('') + '</div>';
 }
 
 function viewDash(){
@@ -505,6 +641,32 @@ function viewDash(){
       '<h4>لا توجد مبيعات بعد</h4><p>ابدأ أول عملية بيع من نقطة البيع بالمسح بالكاميرا</p>' +
       '<button class="btn" onclick="showTab(\'pos\')">ابدأ البيع</button></div></div>';
 
+  var series = salesSeries(7);
+  var weekSum = series.reduce(function(a, p){ return a + p.total; }, 0);
+  var best = series.reduce(function(a, p){ return p.total > a.total ? p : a; }, series[0]);
+
+  var chartHtml =
+    '<div class="chart-card">' +
+      '<div class="chart-head">' +
+        '<span class="ch-title">' + icons.coins + ' مبيعات آخر 7 أيام</span>' +
+        '<span class="ch-total ltr">' + money(weekSum) + '</span>' +
+      '</div>' +
+      (weekSum > 0
+        ? lineChartHtml(series)
+        : '<div class="chart-empty">لا توجد مبيعات في آخر 7 أيام — ابدأ البيع لتظهر الأرقام هنا</div>') +
+      (weekSum > 0 ? '<div class="chart-head" style="margin:8px 0 0"><span class="ch-sub">أعلى يوم: ' + esc(best.label) + ' • ' + money(best.total) + '</span></div>' : '') +
+    '</div>';
+
+  var top = topProducts(4);
+  var topHtml =
+    '<div class="chart-card">' +
+      '<div class="chart-head">' +
+        '<span class="ch-title">' + icons.box + ' الأكثر مبيعاً</span>' +
+        '<span class="ch-sub">حسب الكمية المباعة</span>' +
+      '</div>' +
+      barListHtml(top) +
+    '</div>';
+
   return '' +
   '<div class="hero">' +
     '<div class="h-hi">مرحباً 👋 ' + esc(db.settings.storeName) + '</div>' +
@@ -517,8 +679,10 @@ function viewDash(){
   '</div>' +
 
   '<div class="stat-grid">' +
-    statCard(icons.cash,  'var(--green-bg)', 'var(--green)', money(s.todaySalesTotal), 'مبيعات اليوم (' + s.todaySalesCount + ')') +
-    statCard(icons.coins, 'var(--blue-bg)', 'var(--blue)', money(s.weekSalesTotal), 'مبيعات آخر 7 أيام') +
+    statCard(icons.cash,  'var(--green-bg)', 'var(--green)', money(s.todaySalesTotal), 'مبيعات اليوم (' + s.todaySalesCount + ')',
+      { delta: deltaBadge(s.todaySalesTotal, s.yesterdayTotal) }) +
+    statCard(icons.coins, 'var(--blue-bg)', 'var(--blue)', money(s.weekSalesTotal), 'مبيعات آخر 7 أيام',
+      { delta: deltaBadge(s.weekSalesTotal, s.prevWeekTotal) }) +
     statCard(icons.box,   'var(--primary-light)', 'var(--primary-dark)', s.products, 'منتج في المخزون') +
     statCard(icons.coins, 'var(--primary-light)', 'var(--primary-dark)', money(s.invValue), 'قيمة المخزون') +
     statCard(icons.alert, 'var(--red-bg)', 'var(--red)', s.alerts.stockTotal, 'تنبيهات المخزون', { onclick: 'openAlerts(\'stock\')' }) +
@@ -536,6 +700,10 @@ function viewDash(){
         (s.alerts.expired.length ? s.alerts.expired.length + ' منتهية • ' : '') + s.alerts.expiring.length + ' تنتهي قريباً',
         s.alerts.expiryTotal, 'openAlerts(\'expiry\')')
     : '') +
+
+  '<div style="margin-top:14px"></div>' +
+  chartHtml +
+  topHtml +
 
   '<div class="section-title"><span>أحدث المبيعات</span>' +
     '<span class="hint" style="cursor:pointer" onclick="state.posView=\'history\';showTab(\'pos\')">عرض الكل</span></div>' +
@@ -1877,6 +2045,13 @@ function buildMovementsHtml(productId){
 function viewSettings(){
   return '' +
   '<div class="card">' +
+    '<div class="card-title">🎨 المظهر</div>' +
+    '<div class="field" style="display:flex;align-items:center;gap:10px;margin-bottom:0">' +
+      '<label class="switch" style="margin:0"><input type="checkbox" id="setDark"' + (currentTheme() === 'dark' ? ' checked' : '') + ' onchange="toggleTheme()"><span class="slider"></span></label>' +
+      '<span style="font-size:13px;font-weight:700">الوضع الليلي 🌙 <span style="font-weight:400;color:var(--muted)">(مريح للعين ويوفّر البطارية)</span></span></div>' +
+  '</div>' +
+
+  '<div class="card">' +
     '<div class="card-title">🏪 معلومات المتجر</div>' +
     '<div class="field"><label>اسم المتجر <span style="font-weight:400;color:var(--muted)">(يظهر أعلى وصل الفاتورة المطبوعة)</span></label><input id="setStore" type="text" value="' + esc(db.settings.storeName) + '" oninput="updStorePreview()"></div>' +
     '<div class="field"><label>هاتف المتجر <span style="font-weight:400;color:var(--muted)">(يظهر تحت الاسم على الوصل)</span></label>' +
@@ -1943,8 +2118,9 @@ function viewSettings(){
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
     '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، ونسخ احتياطي محلي.</p>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.5.1</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.6.0</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
+    '<div class="about-line"><span>الواجهة</span><b>وضع ليلي + لوحة تحكم برسوم بيانية</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
     '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
     '<div class="about-line"><span>التحقق</span><b>رمز QR وكود فريد لكل فاتورة</b></div>' +
@@ -2258,6 +2434,13 @@ function init(){
   loadDB();
   seedIfEmpty();
   sanitizeCart();
+  /* ضبط الوضع الليلي المحفوظ (تم تطبيقه مبكراً في index.html لمنع الوميض) */
+  try{
+    var savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    var meta = document.querySelector('meta[name=theme-color]');
+    if(meta) meta.setAttribute('content', savedTheme === 'dark' ? '#0B1220' : '#047857');
+  }catch(e){}
   $('#storeNameTop').textContent = db.settings.storeName;
   showTab('dash');
 }
