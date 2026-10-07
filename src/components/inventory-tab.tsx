@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { apiCall, useFetch } from '@/hooks/use-fetch'
 import { formatDA, type Product } from '@/lib/shared'
 import { Badge } from '@/components/ui/badge'
@@ -15,9 +15,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Minus, Package, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, Boxes, Coins, Loader2, Minus, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 
 interface Props {
   version: number
@@ -28,6 +30,7 @@ const emptyForm = { name: '', sku: '', category: '', description: '', price: '',
 
 export default function InventoryTab({ version, onChanged }: Props) {
   const [q, setQ] = useState('')
+  const [category, setCategory] = useState('all')
   const { data: products, loading, refresh } = useFetch<Product[]>(`/api/products?v=${version}&q=${encodeURIComponent(q)}`)
   const { toast } = useToast()
 
@@ -37,6 +40,26 @@ export default function InventoryTab({ version, onChanged }: Props) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<Product | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+
+  const categories = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of products || []) if (p.category) set.add(p.category)
+    return Array.from(set).sort()
+  }, [products])
+
+  const filtered = useMemo(
+    () => (products || []).filter((p) => category === 'all' || p.category === category),
+    [products, category]
+  )
+
+  const summary = useMemo(() => {
+    const list = products || []
+    return {
+      count: list.length,
+      value: list.reduce((sum, p) => sum + p.price * p.quantity, 0),
+      low: list.filter((p) => p.quantity <= p.minQuantity).length,
+    }
+  }, [products])
 
   const openAdd = () => {
     setEditing(null)
@@ -124,108 +147,149 @@ export default function InventoryTab({ version, onChanged }: Props) {
   }
 
   return (
-    <Card className="border shadow-sm">
-      <CardContent className="p-4 space-y-4">
-        {/* شريط الأدوات */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-52">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="ابحث بالاسم أو SKU أو الفئة…"
-              className="ps-9"
-            />
-          </div>
-          <Button onClick={openAdd} className="gap-1.5">
-            <Plus className="h-4 w-4" /> منتج جديد
-          </Button>
-        </div>
+    <div className="space-y-4">
+      {/* ملخص المخزون */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <SummaryCard icon={Boxes} label="عدد المنتجات" value={String(summary.count)} tone="text-emerald-700 dark:text-emerald-300 bg-emerald-500/10" />
+        <SummaryCard icon={Coins} label="قيمة المخزون" value={formatDA(summary.value)} tone="text-teal-700 dark:text-teal-300 bg-teal-500/10" />
+        <SummaryCard icon={AlertTriangle} label="منتجات منخفضة" value={String(summary.low)} tone="text-amber-700 dark:text-amber-300 bg-amber-500/10" />
+      </div>
 
-        {/* الجدول */}
-        {loading && !products ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
-          </div>
-        ) : !products || products.length === 0 ? (
-          <div className="py-16 text-center text-muted-foreground">
-            <Package className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p className="font-medium">لا توجد منتجات</p>
-            <p className="text-sm">أضف أول منتج أو استخدم زر «بيانات تجريبية» في الأعلى.</p>
-          </div>
-        ) : (
-          <div className="rounded-xl border overflow-hidden">
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-sm min-w-[760px]">
-                <thead className="bg-muted/60 text-muted-foreground">
-                  <tr>
-                    <th className="text-start font-medium px-4 py-3">المنتج</th>
-                    <th className="text-start font-medium px-4 py-3">الفئة</th>
-                    <th className="text-start font-medium px-4 py-3">السعر</th>
-                    <th className="text-start font-medium px-4 py-3 w-44">المخزون</th>
-                    <th className="text-start font-medium px-4 py-3 w-24">إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((p) => {
-                    const low = p.quantity <= p.minQuantity
-                    return (
-                      <tr key={p.id} className="border-t hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold">{p.name}</div>
-                          <div className="text-xs text-muted-foreground font-mono" dir="ltr">{p.sku}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {p.category ? <Badge variant="secondary">{p.category}</Badge> : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-3 font-semibold whitespace-nowrap">{formatDA(p.price)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              variant="outline" size="icon" className="h-7 w-7"
-                              onClick={() => adjustStock(p, -1)} disabled={busyId === p.id || p.quantity === 0}
-                              aria-label="إنقاص كمية"
-                            >
-                              <Minus className="h-3.5 w-3.5" />
-                            </Button>
-                            <Badge
-                              variant="outline"
-                              className={low ? 'border-red-200 bg-red-50 text-red-700 min-w-10 justify-center' : 'border-emerald-200 bg-emerald-50 text-emerald-700 min-w-10 justify-center'}
-                            >
-                              {p.quantity}
-                            </Badge>
-                            <Button
-                              variant="outline" size="icon" className="h-7 w-7"
-                              onClick={() => adjustStock(p, 1)} disabled={busyId === p.id}
-                              aria-label="زيادة كمية"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </Button>
-                            {low && <span className="text-[10px] text-red-600 font-medium ms-1">منخفض</span>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)} aria-label="تعديل">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => setDeleting(p)} aria-label="حذف"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+      <Card className="border-0 shadow-soft ring-1 ring-border/60">
+        <CardContent className="p-4 space-y-4">
+          {/* شريط الأدوات */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-52">
+              <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="ابحث بالاسم أو SKU أو الفئة…"
+                className="ps-9 pe-9"
+              />
+              {q && (
+                <button
+                  onClick={() => setQ('')}
+                  className="absolute end-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="مسح البحث"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
+            {categories.length > 0 && (
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="w-40"><SelectValue placeholder="كل الفئات" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الفئات</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button onClick={openAdd} className="gap-1.5 shadow-sm">
+              <Plus className="h-4 w-4" /> منتج جديد
+            </Button>
           </div>
-        )}
-      </CardContent>
+
+          {/* الجدول */}
+          {loading && !products ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              <Package className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p className="font-medium">{q || category !== 'all' ? 'لا توجد نتائج مطابقة' : 'لا توجد منتجات'}</p>
+              <p className="text-sm">{q || category !== 'all' ? 'جرّب كلمة بحث أو فئة أخرى.' : 'أضف أول منتج أو استخدم زر «بيانات تجريبية» في الأعلى.'}</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border overflow-hidden">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-sm min-w-[760px]">
+                  <thead className="bg-muted/60 text-muted-foreground">
+                    <tr>
+                      <th className="text-start font-medium px-4 py-3">المنتج</th>
+                      <th className="text-start font-medium px-4 py-3">الفئة</th>
+                      <th className="text-start font-medium px-4 py-3">السعر</th>
+                      <th className="text-start font-medium px-4 py-3 w-52">المخزون</th>
+                      <th className="text-start font-medium px-4 py-3 w-24">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p) => {
+                      const low = p.quantity <= p.minQuantity
+                      const capacity = Math.max(p.minQuantity * 3, p.quantity, 1)
+                      const pct = Math.min(100, Math.round((p.quantity / capacity) * 100))
+                      return (
+                        <tr key={p.id} className="border-t transition-colors hover:bg-accent/40">
+                          <td className="px-4 py-3">
+                            <div className="font-semibold">{p.name}</div>
+                            <div className="text-xs text-muted-foreground font-mono" dir="ltr">{p.sku}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {p.category ? <Badge variant="secondary">{p.category}</Badge> : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-4 py-3 font-semibold whitespace-nowrap tabular">{formatDA(p.price)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                variant="outline" size="icon" className="h-7 w-7"
+                                onClick={() => adjustStock(p, -1)} disabled={busyId === p.id || p.quantity === 0}
+                                aria-label="إنقاص كمية"
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                              <Badge
+                                variant="outline"
+                                className={`tabular min-w-10 justify-center ${low ? 'border-red-200 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20'}`}
+                              >
+                                {p.quantity}
+                              </Badge>
+                              <Button
+                                variant="outline" size="icon" className="h-7 w-7"
+                                onClick={() => adjustStock(p, 1)} disabled={busyId === p.id}
+                                aria-label="زيادة كمية"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <Progress
+                                value={pct}
+                                className={`h-1.5 w-28 ${low ? '[&>div]:bg-red-500' : '[&>div]:bg-emerald-500'}`}
+                              />
+                              {low && (
+                                <span className="flex items-center gap-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+                                  <AlertTriangle className="h-3 w-3" /> منخفض
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)} aria-label="تعديل">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => setDeleting(p)} aria-label="حذف"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* نافذة إضافة/تعديل */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -301,6 +365,22 @@ export default function InventoryTab({ version, onChanged }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+function SummaryCard({ icon: Icon, label, value, tone }: { icon: typeof Boxes; label: string; value: string; tone: string }) {
+  return (
+    <Card className="border-0 shadow-soft ring-1 ring-border/60">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${tone}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="tabular text-lg font-extrabold truncate">{value}</div>
+        </div>
+      </CardContent>
     </Card>
   )
 }

@@ -53,6 +53,25 @@ export async function GET() {
 
     const autoRepliesCount = await db.message.count({ where: { isAuto: true, deliveredBy: 'ai' } })
 
+    // سلسلة مبيعات آخر 7 أيام (محسوبة على الخادم لتعكس كل الطلبات لا أحدثها فقط)
+    const salesSeries: { day: string; orders: number; revenue: number }[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() - i)
+      const next = new Date(d)
+      next.setDate(next.getDate() + 1)
+      const bucket = orders.filter((o) => {
+        const t = new Date(o.createdAt).getTime()
+        return t >= d.getTime() && t < next.getTime()
+      })
+      salesSeries.push({
+        day: new Intl.DateTimeFormat('ar-DZ', { weekday: 'short' }).format(d),
+        orders: bucket.length,
+        revenue: bucket.reduce((sum, o) => (o.status === 'cancelled' ? sum : sum + o.total), 0),
+      })
+    }
+
     return NextResponse.json({
       totalProducts,
       totalCustomers,
@@ -66,6 +85,7 @@ export async function GET() {
       autoRepliesCount,
       recentOrders,
       recentMessages,
+      salesSeries,
     })
   } catch (error) {
     console.error('GET /api/stats error:', error)

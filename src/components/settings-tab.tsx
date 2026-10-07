@@ -33,20 +33,25 @@ export default function SettingsTab({ version, onChanged }: Props) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (data && !form) setForm(data)
+    if (data && !form) {
+      const t = setTimeout(() => setForm(data), 0)
+      return () => clearTimeout(t)
+    }
   }, [data, form])
 
   if (loading && !data) {
     return (
       <div className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-80 rounded-xl" />
-        <Skeleton className="h-80 rounded-xl" />
+        <Skeleton className="h-80 rounded-2xl" />
+        <Skeleton className="h-80 rounded-2xl" />
       </div>
     )
   }
   if (!form) return null
 
   const set = (key: keyof Settings, value: string) => setForm({ ...form, [key]: value })
+
+  const dirty = !!data && Object.keys(form).some((k) => form[k] !== data[k])
 
   const save = async () => {
     setSaving(true)
@@ -72,9 +77,14 @@ export default function SettingsTab({ version, onChanged }: Props) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {/* معلومات المتجر */}
-      <Card className="border shadow-sm">
+      <Card className="border-0 shadow-soft ring-1 ring-border/60">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Store className="h-4 w-4 text-primary" /> معلومات المتجر</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Store className="h-4 w-4" />
+            </span>
+            معلومات المتجر
+          </CardTitle>
           <CardDescription>تستخدمها المنصة في الرسائل والردود الآلية على العملاء.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -94,9 +104,14 @@ export default function SettingsTab({ version, onChanged }: Props) {
       </Card>
 
       {/* إعدادات المساعد الذكي */}
-      <Card className="border shadow-sm">
+      <Card className="border-0 shadow-soft ring-1 ring-border/60">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Bot className="h-4 w-4 text-primary" /> شخصية المساعد الذكي</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Bot className="h-4 w-4" />
+            </span>
+            شخصية المساعد الذكي
+          </CardTitle>
           <CardDescription>يتحكم في أسلوب الردود الآلية على رسائل العملاء.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -124,15 +139,16 @@ export default function SettingsTab({ version, onChanged }: Props) {
               يستخدم المساعد سياق المخزون الحالي وطلبات العميل تلقائياً عند الرد — لا حاجة لتكراره هنا.
             </p>
           </div>
-          <div className="rounded-xl bg-muted/60 border p-3 text-sm text-muted-foreground">
+          <div className="rounded-xl border bg-primary/5 p-3 text-sm text-muted-foreground">
             <span className="font-semibold text-foreground">كيف يعمل الرد الآلي؟</span> عند وصول رسالة جديدة من عميل والرد الآلي
             مفعّل، يقرأ المساعد رسالته ثم يفحص منتجاتك المتوفرة وسجل طلباته قبل صياغة رد مناسب وإرساله فوراً.
           </div>
         </CardContent>
       </Card>
 
-      <div className="lg:col-span-2 flex justify-end">
-        <Button onClick={save} disabled={saving} className="gap-1.5">
+      <div className="lg:col-span-2 flex items-center justify-end gap-3">
+        {dirty && <span className="text-sm text-amber-600 dark:text-amber-400">لديك تغييرات غير محفوظة</span>}
+        <Button onClick={save} disabled={saving || !dirty} className="gap-1.5 shadow-sm">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           حفظ الإعدادات
         </Button>

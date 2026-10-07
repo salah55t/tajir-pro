@@ -188,34 +188,55 @@ export default function OrdersTab({ version, onChanged }: Props) {
     }
   }
 
-  const filtered = (orders || []).filter((o) => statusFilter === 'all' || o.status === statusFilter)
+  const filtered = useMemo(
+    () => (orders || []).filter((o) => statusFilter === 'all' || o.status === statusFilter),
+    [orders, statusFilter]
+  )
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: orders?.length || 0 }
+    for (const o of orders || []) counts[o.status] = (counts[o.status] || 0) + 1
+    return counts
+  }, [orders])
 
   return (
-    <Card className="border shadow-sm">
-      <CardContent className="p-4 space-y-4">
-        {/* شريط الأدوات */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="كل الحالات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل الحالات</SelectItem>
-              {ORDER_STATUSES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex-1" />
-          <Button onClick={() => { resetForm(); setCreateOpen(true) }} className="gap-1.5">
-            <Plus className="h-4 w-4" /> طلب جديد
-          </Button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-bold text-lg">الطلبات</h2>
+          <p className="text-sm text-muted-foreground">تابع الطلبات وحدّث حالتها وأرسلها لشركات التوصيل.</p>
         </div>
+        <Button onClick={() => { resetForm(); setCreateOpen(true) }} className="gap-1.5 shadow-sm">
+          <Plus className="h-4 w-4" /> طلب جديد
+        </Button>
+      </div>
 
+      {/* شرائح الحالة */}
+      <div className="custom-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        <StatusChip
+          label="كل الحالات"
+          count={statusCounts.all || 0}
+          active={statusFilter === 'all'}
+          onClick={() => setStatusFilter('all')}
+        />
+        {ORDER_STATUSES.map((s) => (
+          <StatusChip
+            key={s.value}
+            label={s.label}
+            count={statusCounts[s.value] || 0}
+            active={statusFilter === s.value}
+            onClick={() => setStatusFilter(s.value)}
+            color={s.color}
+          />
+        ))}
+      </div>
+
+      <Card className="border-0 shadow-soft ring-1 ring-border/60">
+        <CardContent className="p-4 space-y-4">
         {/* قائمة الطلبات */}
         {loading && !orders ? (
           <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground">
@@ -226,20 +247,20 @@ export default function OrdersTab({ version, onChanged }: Props) {
         ) : (
           <div className="space-y-3">
             {filtered.map((o) => (
-              <div key={o.id} className="rounded-xl border p-4 hover:bg-muted/30 transition-colors space-y-3">
+              <div key={o.id} className="rounded-2xl border p-4 transition-all hover:border-primary/30 hover:bg-accent/30 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold font-mono text-sm" dir="ltr">{o.orderNumber}</span>
+                      <span className="font-bold font-mono text-sm tabular" dir="ltr">{o.orderNumber}</span>
                       <Badge variant="outline" className={statusColor(o.status)}>{statusLabel(o.status)}</Badge>
                       {o.trackingNumber && (
-                        <Badge variant="outline" className="border-teal-200 bg-teal-50 text-teal-700" dir="ltr">
+                        <Badge variant="outline" className="border-teal-200 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/20" dir="ltr">
                           <Truck className="h-3 w-3 me-1" /> {o.trackingNumber}
                         </Badge>
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground mt-1">
-                      {o.customer?.name} · <span dir="ltr" className="font-mono">{o.customer?.phone}</span> · {formatDate(o.createdAt)} · {o.items.length} منتج · <span className="font-bold text-foreground">{formatDA(o.total)}</span>
+                      {o.customer?.name} · <span dir="ltr" className="font-mono">{o.customer?.phone}</span> · {formatDate(o.createdAt)} · {o.items.length} منتج · <span className="font-bold text-foreground tabular">{formatDA(o.total)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -298,7 +319,8 @@ export default function OrdersTab({ version, onChanged }: Props) {
             ))}
           </div>
         )}
-      </CardContent>
+        </CardContent>
+      </Card>
 
       {/* نافذة إنشاء طلب */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -484,6 +506,34 @@ export default function OrdersTab({ version, onChanged }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </div>
+  )
+}
+
+function StatusChip({
+  label,
+  count,
+  active,
+  onClick,
+  color,
+}: {
+  label: string
+  count: number
+  active: boolean
+  onClick: () => void
+  color?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
+        active
+          ? 'border-primary/30 bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+          : `${color ? `${color} border` : 'border-transparent bg-card text-muted-foreground'} hover:brightness-[0.98]`
+      }`}
+    >
+      {label}
+      <span className={`tabular rounded-full px-1.5 text-[11px] ${active ? 'bg-white/20' : 'bg-black/5 dark:bg-white/10'}`}>{count}</span>
+    </button>
   )
 }

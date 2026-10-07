@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiCall, useFetch } from '@/hooks/use-fetch'
-import { formatDate, type Customer, type Message } from '@/lib/shared'
+import { formatRelative, type Customer, type Message } from '@/lib/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import {
-  Bot, Loader2, MessageCircle, MessageSquare, Phone, RefreshCw, Send, Sparkles, UserPlus, Users,
+  Bot, Loader2, MessageCircle, MessageSquare, Phone, RefreshCw, Search, Send, Sparkles, UserPlus, Users,
 } from 'lucide-react'
 
 interface Props {
@@ -27,11 +27,18 @@ const SAMPLE_INCOMING = [
   'شكراً، خدمتكم ممتازة والطلب وصل بسرعة',
 ]
 
+const QUICK_REPLIES = [
+  'شكراً لتواصلك معنا، سنعالج طلبك فوراً.',
+  'التوصيل متوفر لجميع الولايات، والرسوم تبدأ من 350 دج.',
+  'سنتحقق من المخزون ونؤكد لك التوفر خلال دقائق.',
+]
+
 export default function MessagesTab({ version, onChanged }: Props) {
   const { data: customers, loading: loadingCustomers } = useFetch<Customer[]>(`/api/customers?v=${version}`)
   const { toast } = useToast()
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
@@ -53,7 +60,8 @@ export default function MessagesTab({ version, onChanged }: Props) {
   // اختيار أول عميل تلقائياً
   useEffect(() => {
     if (!selectedId && customers && customers.length > 0) {
-      setSelectedId(customers[0].id)
+      const t = setTimeout(() => setSelectedId(customers[0].id), 0)
+      return () => clearTimeout(t)
     }
   }, [customers, selectedId])
 
@@ -61,6 +69,13 @@ export default function MessagesTab({ version, onChanged }: Props) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])
+
+  const filteredCustomers = useMemo(() => {
+    const list = customers || []
+    const needle = query.trim().toLowerCase()
+    if (!needle) return list
+    return list.filter((c) => c.name.toLowerCase().includes(needle) || c.phone.includes(needle))
+  }, [customers, query])
 
   const selectedCustomer = useMemo(
     () => customers?.find((c) => c.id === selectedId) || null,
@@ -127,7 +142,6 @@ export default function MessagesTab({ version, onChanged }: Props) {
           title: 'وصلت رسالة من العميل وردّ المساعد الذكي فوراً',
           description: `«${content.slice(0, 60)}${content.length > 60 ? '…' : ''}»`,
         })
-        // إظهار الرد الآلي بعد تأخير بسيط لمحاكاة الكتابة
         setTimeout(() => refreshMessages(), 300)
       } else {
         toast({
@@ -145,32 +159,41 @@ export default function MessagesTab({ version, onChanged }: Props) {
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_1fr] min-h-[60vh]">
       {/* قائمة العملاء */}
-      <Card className="border shadow-sm self-start w-full">
+      <Card className="border-0 shadow-soft ring-1 ring-border/60 self-start w-full">
         <CardContent className="p-3">
           <div className="flex items-center justify-between mb-2 px-1">
             <h3 className="font-bold text-sm flex items-center gap-1.5"><Users className="h-4 w-4 text-primary" /> العملاء</h3>
-            <Badge variant="secondary">{customers?.length ?? 0}</Badge>
+            <Badge variant="secondary" className="tabular">{customers?.length ?? 0}</Badge>
+          </div>
+          <div className="relative mb-2">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث عن عميل…"
+              className="h-8 ps-8 text-sm"
+            />
           </div>
           {loadingCustomers && !customers ? (
             <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
             </div>
-          ) : !customers || customers.length === 0 ? (
+          ) : filteredCustomers.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground text-sm">
               <UserPlus className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              لا يوجد عملاء بعد. أضف عملاء من تبويب الطلبات.
+              {query ? 'لا يوجد عميل مطابق.' : 'لا يوجد عملاء بعد. أضف عملاء من تبويب الطلبات.'}
             </div>
           ) : (
             <ul className="space-y-1 max-h-[65vh] overflow-y-auto custom-scrollbar pe-1">
-              {customers.map((c) => (
+              {filteredCustomers.map((c) => (
                 <li key={c.id}>
                   <button
                     onClick={() => { setSelectedId(c.id); setAiSuggestion(null) }}
-                    className={`w-full text-start rounded-lg px-3 py-2.5 transition-colors flex items-center gap-2.5 ${
-                      selectedId === c.id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/60 border border-transparent'
+                    className={`w-full text-start rounded-xl px-3 py-2.5 transition-colors flex items-center gap-2.5 ${
+                      selectedId === c.id ? 'bg-primary/10 ring-1 ring-primary/25' : 'hover:bg-accent/60'
                     }`}
                   >
-                    <div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
                       {c.name.charAt(0)}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -186,11 +209,11 @@ export default function MessagesTab({ version, onChanged }: Props) {
       </Card>
 
       {/* المحادثة */}
-      <Card className="border shadow-sm flex flex-col">
+      <Card className="border-0 shadow-soft ring-1 ring-border/60 flex flex-col">
         {selectedCustomer ? (
           <>
             <div className="flex items-center gap-2.5 border-b px-4 py-3">
-              <div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
                 {selectedCustomer.name.charAt(0)}
               </div>
               <div className="min-w-0 flex-1">
@@ -216,7 +239,7 @@ export default function MessagesTab({ version, onChanged }: Props) {
             <div ref={scrollRef} className="flex-1 min-h-[300px] max-h-[52vh] overflow-y-auto custom-scrollbar p-4 space-y-3 bg-muted/20">
               {loadingMessages && !messages ? (
                 <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className={`h-12 rounded-xl ${i % 2 ? 'ms-auto' : ''} w-2/3`} />)}
+                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className={`h-12 rounded-2xl ${i % 2 ? 'ms-auto' : ''} w-2/3`} />)}
                 </div>
               ) : !messages || messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm py-10">
@@ -232,20 +255,20 @@ export default function MessagesTab({ version, onChanged }: Props) {
                       <div
                         className={`max-w-[80%] sm:max-w-[70%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm ${
                           isIncoming
-                            ? 'bg-white border rounded-ts-sm'
-                            : 'bg-primary text-primary-foreground rounded-te-sm'
+                            ? 'bg-card border rounded-ss-sm'
+                            : 'bg-primary text-primary-foreground rounded-se-sm'
                         }`}
                       >
                         <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
                         <div className={`flex items-center gap-1.5 mt-1 text-[10px] ${isIncoming ? 'text-muted-foreground' : 'text-primary-foreground/80'}`}>
-                          <span>{formatDate(m.createdAt)}</span>
+                          <span>{formatRelative(m.createdAt)}</span>
                           {m.isAuto && m.deliveredBy === 'ai' && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-300 text-emerald-700 bg-white/60">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-300 text-emerald-700 bg-white/70 dark:bg-transparent dark:text-emerald-300 dark:border-emerald-500/40">
                               <Bot className="h-2.5 w-2.5 me-0.5" /> رد آلي
                             </Badge>
                           )}
                           {m.isAuto && m.deliveredBy === 'system' && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-teal-300 text-teal-700 bg-white/60">
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-teal-300 text-teal-700 bg-white/70 dark:bg-transparent dark:text-teal-300 dark:border-teal-500/40">
                               إشعار نظام
                             </Badge>
                           )}
@@ -259,7 +282,7 @@ export default function MessagesTab({ version, onChanged }: Props) {
 
             {/* الاقتراح الذكي */}
             {(aiLoading || aiSuggestion) && (
-              <div className="border-t bg-emerald-50/60 px-4 py-3">
+              <div className="border-t bg-primary/5 px-4 py-3">
                 {aiLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -274,7 +297,7 @@ export default function MessagesTab({ version, onChanged }: Props) {
                       value={aiSuggestion.text}
                       onChange={(e) => setAiSuggestion({ ...aiSuggestion, text: e.target.value })}
                       rows={3}
-                      className="bg-white text-sm"
+                      className="bg-card text-sm"
                     />
                     <div className="flex items-center gap-2 mt-2">
                       <Button size="sm" onClick={() => sendOutgoing(aiSuggestion.text)} disabled={sending} className="gap-1.5">
@@ -286,6 +309,19 @@ export default function MessagesTab({ version, onChanged }: Props) {
                 )}
               </div>
             )}
+
+            {/* ردود سريعة */}
+            <div className="border-t px-3 pt-2.5 flex gap-1.5 overflow-x-auto custom-scrollbar">
+              {QUICK_REPLIES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setInput(r)}
+                  className="shrink-0 rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {r.length > 34 ? `${r.slice(0, 34)}…` : r}
+                </button>
+              ))}
+            </div>
 
             {/* صندوق الإرسال */}
             <div className="border-t p-3 flex items-center gap-2">

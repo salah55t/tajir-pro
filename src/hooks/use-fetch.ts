@@ -7,40 +7,43 @@ export function useFetch<T>(url: string | null) {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(!!url)
   const [error, setError] = useState<string | null>(null)
-  const mounted = useRef(true)
 
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-    }
-  }, [])
+  // آخر طلب بدأ — لتجاهل النتائج المتأخرة عند تغيّر الرابط بسرعة
+  const requestId = useRef(0)
 
   const refresh = useCallback(async () => {
     if (!url) return
+    const current = ++requestId.current
     try {
       const res = await fetch(url)
       const json = await res.json()
+      if (current !== requestId.current) return
       if (!res.ok) {
         throw new Error(json.error || 'حدث خطأ غير متوقع')
       }
-      if (mounted.current) {
-        setData(json as T)
-        setError(null)
-      }
+      setData(json as T)
+      setError(null)
     } catch (e) {
-      if (mounted.current) {
-        setError(e instanceof Error ? e.message : 'خطأ في الاتصال')
-      }
+      if (current !== requestId.current) return
+      setError(e instanceof Error ? e.message : 'خطأ في الاتصال')
     } finally {
-      if (mounted.current) setLoading(false)
+      if (current === requestId.current) setLoading(false)
     }
   }, [url])
 
   useEffect(() => {
-    setLoading(true)
-    refresh()
-  }, [refresh])
+    if (!url) return
+    let active = true
+    const load = async () => {
+      setLoading(true)
+      await refresh()
+      if (!active) return
+    }
+    load()
+    return () => {
+      active = false
+    }
+  }, [url, refresh])
 
   return { data, loading, error, refresh, setData }
 }
@@ -56,7 +59,7 @@ export async function apiCall<T = unknown>(
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
-  const json = await res.json()
+  const json = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(json.error || json.autoReplyError || 'حدث خطأ غير متوقع')
   }

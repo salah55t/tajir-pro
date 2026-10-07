@@ -90,6 +90,7 @@ export interface Stats {
   autoRepliesCount: number
   recentOrders: Order[]
   recentMessages: Message[]
+  salesSeries: { day: string; orders: number; revenue: number }[]
 }
 
 export const ORDER_STATUSES = [
@@ -124,4 +125,19 @@ export function formatDate(iso: string): string {
   } catch {
     return iso
   }
+}
+
+// تنسيق زمني نسبي للرسائل والطلبات الحديثة
+export function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return iso
+  const diff = Date.now() - then
+  const mins = Math.round(diff / 60000)
+  if (mins < 1) return 'الآن'
+  if (mins < 60) return `قبل ${mins} دقيقة`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `قبل ${hours} ساعة`
+  const days = Math.round(hours / 24)
+  if (days < 30) return `قبل ${days} يوم`
+  return formatDate(iso)
 }
