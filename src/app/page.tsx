@@ -8,6 +8,7 @@ import InventoryTab from '@/components/inventory-tab'
 import OrdersTab from '@/components/orders-tab'
 import DeliveryTab from '@/components/delivery-tab'
 import MessagesTab from '@/components/messages-tab'
+import CustomersTab from '@/components/customers-tab'
 import SettingsTab from '@/components/settings-tab'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
@@ -16,13 +17,14 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import {
   Store, Package, ShoppingBag, Truck, MessageSquare, LayoutDashboard, Settings as SettingsIcon,
-  Bot, Sparkles, Loader2, Database, X,
+  Bot, Sparkles, Loader2, Database, X, Users,
 } from 'lucide-react'
 
 const TABS = [
   { value: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
   { value: 'inventory', label: 'المخزون', icon: Package },
   { value: 'orders', label: 'الطلبات', icon: ShoppingBag },
+  { value: 'customers', label: 'العملاء', icon: Users },
   { value: 'delivery', label: 'التوصيل', icon: Truck },
   { value: 'messages', label: 'الرسائل', icon: MessageSquare },
   { value: 'settings', label: 'الإعدادات', icon: SettingsIcon },
@@ -187,6 +189,7 @@ export default function Home() {
           {tab === 'dashboard' && <DashboardTab version={version} onChanged={onChanged} onNavigate={setTab} />}
           {tab === 'inventory' && <InventoryTab version={version} onChanged={onChanged} />}
           {tab === 'orders' && <OrdersTab version={version} onChanged={onChanged} />}
+          {tab === 'customers' && <CustomersTab version={version} onChanged={onChanged} onNavigate={setTab} />}
           {tab === 'delivery' && <DeliveryTab version={version} onChanged={onChanged} />}
           {tab === 'messages' && <MessagesTab version={version} onChanged={onChanged} />}
           {tab === 'settings' && <SettingsTab version={version} onChanged={onChanged} />}

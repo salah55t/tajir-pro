@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiCall, useFetch } from '@/hooks/use-fetch'
 import type { Settings } from '@/lib/client-types'
 import { Badge } from '@/components/ui/badge'
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { Bot, Loader2, Save, Store } from 'lucide-react'
+import { Bot, Database, Download, Loader2, Save, Store, Upload } from 'lucide-react'
 
 interface Props {
   version: number
@@ -31,6 +31,50 @@ export default function SettingsTab({ version, onChanged }: Props) {
   const { toast } = useToast()
   const [form, setForm] = useState<Settings | null>(null)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const exportBackup = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch('/api/backup')
+      if (!res.ok) throw new Error('فشل التصدير')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `tajirpro-backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: 'تم تصدير النسخة الاحتياطية', description: 'حُفظ الملف في مجلد التنزيلات.' })
+    } catch (e) {
+      toast({ title: 'خطأ', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const importBackup = async (file: File) => {
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      const res = await apiCall<{ counts: Record<string, number> }>('/api/backup', 'POST', parsed)
+      toast({
+        title: 'تم استيراد النسخة الاحتياطية',
+        description: `${res.counts.products} منتج · ${res.counts.customers} عميل · ${res.counts.orders} طلب.`,
+      })
+      refresh()
+      setForm(null)
+      onChanged()
+    } catch (e) {
+      toast({ title: 'فشل الاستيراد', description: e instanceof Error ? e.message : 'ملف غير صالح', variant: 'destructive' })
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   useEffect(() => {
     if (data && !form) {
@@ -143,6 +187,49 @@ export default function SettingsTab({ version, onChanged }: Props) {
             <span className="font-semibold text-foreground">كيف يعمل الرد الآلي؟</span> عند وصول رسالة جديدة من عميل والرد الآلي
             مفعّل، يقرأ المساعد رسالته ثم يفحص منتجاتك المتوفرة وسجل طلباته قبل صياغة رد مناسب وإرساله فوراً.
           </div>
+        </CardContent>
+      </Card>
+
+      {/* النسخ الاحتياطي */}
+      <Card className="border-0 shadow-soft ring-1 ring-border/60 lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Database className="h-4 w-4" />
+            </span>
+            النسخ الاحتياطي والاستعادة
+          </CardTitle>
+          <CardDescription>
+            صدّر كل بياناتك في ملف واحد واحتفظ به في مكان آمن، أو استعد نسخة سابقة. البيانات محفوظة على هذا الجهاز فقط.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <Button onClick={exportBackup} disabled={exporting} variant="outline" className="gap-1.5">
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            تصدير نسخة احتياطية
+          </Button>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            variant="outline"
+            className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-500/40 dark:text-amber-300 dark:hover:bg-amber-500/10"
+          >
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            استيراد نسخة احتياطية
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) importBackup(file)
+            }}
+          />
+          <span className="text-xs text-muted-foreground">
+            الاستيراد يستبدل البيانات الحالية بالكامل — صدّر نسخة قبل ذلك.
+          </span>
         </CardContent>
       </Card>
 
