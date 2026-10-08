@@ -994,3 +994,145 @@ body.has-checkoutbar{ padding-bottom:calc(174px + env(safe-area-inset-bottom)); 
 #topbar .store-name{ letter-spacing:-.2px; }
 .alert-banner{ transition:transform .12s ease; }
 .alert-banner:active{ transform:scale(.99); }
+
+/* ============================================================
+   v1.7.0 — زر التنبيهات + نظام الاشتراك + لوحة التنبيهات
+   ============================================================ */
+
+/* ---- مجموعة أزرار الشريط العلوي ---- */
+.topbar-actions{
+  display:flex; align-items:center; gap:8px;
+}
+.icon-btn{
+  position:relative;
+  width:38px; height:38px; border-radius:12px; flex:none;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.16); color:#fff;
+  border:1px solid rgba(255,255,255,.28); cursor:pointer;
+  transition:transform .14s ease, background .18s ease;
+}
+.icon-btn:active{ transform:scale(.92); background:rgba(255,255,255,.26); }
+.icon-btn svg{ transition:transform .35s cubic-bezier(.2,1.3,.4,1); }
+/* الحفاظ على سلوك زر الوضع الليلي القديم */
+.theme-btn{ /* inherits from .icon-btn */ }
+.theme-btn.spin svg{ transform:rotate(360deg); }
+
+/* ---- شارة عدد التنبيهات على الجرس ---- */
+.notif-badge{
+  position:absolute; top:-5px; inset-inline-end:-5px;
+  min-width:18px; height:18px; padding:0 5px;
+  border-radius:999px;
+  background:#EF4444; color:#fff;
+  font-size:10.5px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+  border:2px solid #047857;
+  box-shadow:0 2px 6px rgba(239,68,68,.5);
+  animation:notifPop .3s cubic-bezier(.2,1.4,.4,1);
+}
+@keyframes notifPop{
+  0%{ transform:scale(0); }
+  60%{ transform:scale(1.18); }
+  100%{ transform:scale(1); }
+}
+
+/* ---- شاشة التنبيهات (sheet) ---- */
+.notif-list{ padding:0 4px 8px; }
+.notif-item{
+  display:flex; gap:12px; align-items:flex-start;
+  padding:12px; border-radius:12px; margin-bottom:8px;
+  background:var(--surface-2); border:1px solid var(--line);
+  border-inline-start:4px solid var(--muted);
+  animation:riseIn .25s ease backwards;
+}
+.notif-item .ni-icon{
+  width:36px; height:36px; border-radius:10px; flex:none;
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; background:var(--surface-3);
+}
+.notif-item .ni-body{ flex:1; min-width:0; }
+.notif-item .ni-title{ font-weight:800; font-size:13.5px; color:var(--text); margin-bottom:2px; }
+.notif-item .ni-sub{
+  font-size:12px; color:var(--muted); line-height:1.5;
+  word-break:break-word;
+}
+.notif-item.lvl-danger{ border-inline-start-color:var(--red); background:var(--red-bg); }
+.notif-item.lvl-danger .ni-icon{ background:var(--red-bg); }
+.notif-item.lvl-warn{ border-inline-start-color:var(--amber); background:var(--amber-bg); }
+.notif-item.lvl-warn .ni-icon{ background:var(--amber-bg); }
+.notif-item.lvl-info{ border-inline-start-color:var(--blue); }
+.notif-item.lvl-info .ni-icon{ background:var(--blue-bg); }
+.notif-item.lvl-ok{ border-inline-start-color:var(--green); background:var(--green-bg); }
+.notif-item.lvl-ok .ni-icon{ background:var(--green-bg); }
+.notif-foot{ padding:8px 4px 4px; }
+
+/* ---- بطاقة الاشتراك في الإعدادات ---- */
+.sub-card{
+  border-inline-start:4px solid var(--green);
+  background:linear-gradient(135deg, var(--card), var(--surface-2));
+}
+.sub-card.sub-state-none{ border-inline-start-color:var(--red); }
+.sub-card.sub-state-expired{ border-inline-start-color:var(--red); }
+.sub-card.sub-state-soon{ border-inline-start-color:var(--red); }
+.sub-card.sub-state-warn{ border-inline-start-color:var(--amber); }
+.sub-card-head{ display:flex; align-items:center; gap:12px; }
+.sub-card-icon{
+  width:44px; height:44px; border-radius:12px; flex:none;
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px;
+  background:var(--primary-light); color:var(--primary-dark);
+}
+.sub-status-text{ font-size:13.5px; font-weight:700; color:var(--text); margin-top:2px; }
+.sub-expiry-text{ font-size:11.5px; color:var(--muted); margin-top:1px; }
+
+/* ---- مودال إدارة الاشتراك ---- */
+.sub-status-card{
+  margin:4px 0 12px; padding:16px; border-radius:14px;
+  border:1px solid var(--line); background:var(--surface-2);
+  text-align:center;
+}
+.sub-status-card .ss-label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.sub-status-card .ss-state{ font-size:17px; font-weight:800; margin:4px 0; }
+.sub-status-card .ss-expiry{ font-size:12.5px; color:var(--muted); }
+.sub-state-none{ background:var(--red-bg); }
+.sub-state-none .ss-state{ color:var(--red); }
+.sub-state-ok{ background:var(--green-bg); }
+.sub-state-ok .ss-state{ color:var(--green); }
+.sub-state-warn{ background:var(--amber-bg); }
+.sub-state-warn .ss-state{ color:var(--amber); }
+.sub-state-soon{ background:var(--red-bg); }
+.sub-state-soon .ss-state{ color:var(--red); }
+.sub-state-expired{ background:var(--red-bg); }
+.sub-state-expired .ss-state{ color:var(--red); }
+
+/* صف معلومات الجهاز */
+.sub-device-row{
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding:8px 0; border-bottom:1px solid var(--line);
+  font-size:13px;
+}
+.sub-device-row:last-child{ border-bottom:none; }
+.sub-device-row > span{ color:var(--muted); }
+.sub-device-row > b{ font-weight:700; color:var(--text); }
+.fp-chip{
+  background:var(--primary-light); color:var(--primary-dark);
+  padding:3px 10px; border-radius:8px; font-size:13px;
+  letter-spacing:.5px;
+}
+
+/* ---- زر صغير الحجم xs ---- */
+.btn.xs{ padding:3px 8px; font-size:11px; border-radius:8px; }
+
+/* ---- نتيجة توليد الكود (sim-result) ---- */
+.sim-result{
+  padding:14px; border-radius:12px; background:var(--green-bg);
+  border:1px solid var(--green); text-align:center;
+}
+.sim-result .sr-label{ font-size:11px; color:var(--green); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.sim-result .sr-code{
+  font-family:'Courier New',monospace; font-size:15px; font-weight:800;
+  color:var(--primary-dark); margin:8px 0; padding:8px; background:#fff;
+  border-radius:8px; word-break:break-all; direction:ltr;
+}
+[data-theme="dark"] .sim-result .sr-code{ background:var(--surface-3); color:var(--green); }
+.sim-result .sr-meta{ font-size:12px; color:var(--muted); }
+

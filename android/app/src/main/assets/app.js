@@ -2043,7 +2043,26 @@ function buildMovementsHtml(productId){
    3) الإعدادات + النسخ الاحتياطي
    ============================================================ */
 function viewSettings(){
+  var sub = subStatus();
+  var subLabel = { none:'🚫 غير مفعّل', ok:'✅ ساري', warn:'🔔 ينتهي قريباً', soon:'⚠️ ينتهي قريباً جداً', expired:'⏰ منتهي' }[sub.state] || sub.label;
+  var subCls = 'sub-state-' + (sub.state === 'none' ? 'none' : sub.state);
+
   return '' +
+  '<div class="card sub-card ' + subCls + '">' +
+    '<div class="sub-card-head">' +
+      '<div class="sub-card-icon">🔑</div>' +
+      '<div style="flex:1">' +
+        '<div class="card-title" style="margin:0">الاشتراك</div>' +
+        '<div class="sub-status-text">' + esc(subLabel) + '</div>' +
+        (sub.expiryDate ? '<div class="sub-expiry-text">ينتهي: ' + esc(sub.expiryDate) + (sub.daysLeft > 0 ? ' • متبقي ' + sub.daysLeft + ' يوم' : '') + '</div>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="btn-row" style="margin-top:10px">' +
+      '<button class="btn sm" onclick="openSubscriptionModal()">' + (sub.state === 'none' ? '🔑 تفعيل الاشتراك' : '🔄 تجديد') + '</button>' +
+      '<button class="btn sm outline" onclick="openNotifications()">🔔 التنبيهات</button>' +
+    '</div>' +
+  '</div>' +
+
   '<div class="card">' +
     '<div class="card-title">🎨 المظهر</div>' +
     '<div class="field" style="display:flex;align-items:center;gap:10px;margin-bottom:0">' +
@@ -2116,15 +2135,20 @@ function viewSettings(){
 
   '<div class="card">' +
     '<div class="card-title">ℹ️ حول التطبيق</div>' +
-    '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، ونسخ احتياطي محلي.</p>' +
+    '<p class="about-desc">تاجر برو — تطبيق لإدارة المتاجر يعمل بدون إنترنت: نقطة بيع بمسح الباركود بالكاميرا، طباعة فواتير حرارية عبر البلوتوث مع رمز تحقق لكل فاتورة لمنع الاحتيال، إدارة مخزون وتنبيهات نفاد وصلاحية، نظام اشتراك صالح لجهاز واحد، ونسخ احتياطي محلي.</p>' +
     '<div class="about-line"><span>التطبيق</span><b>تاجر برو — TajirPro</b></div>' +
-    '<div class="about-line"><span>الإصدار</span><b class="ltr">1.6.0</b></div>' +
+    '<div class="about-line"><span>الإصدار</span><b class="ltr">' + getAppVersion() + '</b></div>' +
     '<div class="about-line"><span>العمل</span><b>بدون إنترنت 100%</b></div>' +
     '<div class="about-line"><span>الواجهة</span><b>وضع ليلي + لوحة تحكم برسوم بيانية</b></div>' +
     '<div class="about-line"><span>القارئ</span><b>باركود بالكاميرا (EAN / UPC / QR...)</b></div>' +
     '<div class="about-line"><span>الطباعة</span><b>فاتورة حرارية عبر البلوتوث (ESC/POS)</b></div>' +
     '<div class="about-line"><span>التحقق</span><b>رمز QR وكود فريد لكل فاتورة</b></div>' +
-    '<div class="about-line"><span>التنبيهات</span><b>نفاذ المخزون وانتهاء الصلاحية</b></div>' +
+    '<div class="about-line"><span>التنبيهات</span><b>نفاذ المخزون، انتهاء الصلاحية، والاشتراك</b></div>' +
+    '<div class="about-line"><span>الاشتراك</span><b>كود صالح لجهاز واحد مع التجديد</b></div>' +
+    '<div class="btn-row" style="margin-top:12px">' +
+      '<button class="btn sm outline" onclick="checkForUpdates()">🔄 فحص التحديثات</button>' +
+      '<button class="btn sm ghost" onclick="openAdminGen()">🔑 مولّد الأكواد</button>' +
+    '</div>' +
   '</div>';
 }
 
@@ -2428,6 +2452,497 @@ function sanitizeCart(){
 }
 
 /* ============================================================
+   نظام الاشتراك — مفتاح صالح لجهاز واحد مع التجديد
+   ============================================================
+   صيغة الكود:  TJP-{D}-{HASH8}-{EXP}-{CHK2}
+     D     : مدة الاشتراك بالأيام (مثال: 30, 365)
+     HASH8 : بصمة الجهاز (أول 8 محارف من SHA-256(deviceId)) — من جسر TajirDeviceBridge
+     EXP   : يوم انتهاء الاشتراك (يوم منذ 1970-01-01) بترميز base36 بأحرف كبيرة
+     CHK2  : حرفان تحقق (مجموع تحقق متعدد الحدود من D+HASH8+EXP)
+
+   الكود يُولّد مرة واحدة لكل جهاز (بواسطة المسؤول الذي يعرف بصمة الجهاز)،
+   ولا يعمل على جهاز آخر. يمكن تجديد الاشتراك بإدخال كود جديد بتاريخ انتهاء أحدث.
+   ============================================================ */
+
+var SUB_KEY = 'tajirpro_sub_v1';
+
+/* جسر معرف الجهاز — متاح فقط داخل تطبيق أندرويد */
+function deviceBridgeAvailable(){
+  return typeof TajirDeviceBridge !== 'undefined';
+}
+function getDeviceFingerprint(){
+  try{
+    if(deviceBridgeAvailable() && TajirDeviceBridge.getDeviceFingerprint){
+      return String(TajirDeviceBridge.getDeviceFingerprint()).toUpperCase();
+    }
+  }catch(e){}
+  /* وضع المتصفح (تطوير): بصمة ثابتة افتراضية (8 محارف سداسية عشر) */
+  return 'BADCAFE0';
+}
+function getDeviceIdFull(){
+  try{
+    if(deviceBridgeAvailable() && TajirDeviceBridge.getDeviceId){
+      return String(TajirDeviceBridge.getDeviceId());
+    }
+  }catch(e){}
+  return 'browser-dev';
+}
+function getAppVersion(){
+  try{
+    if(deviceBridgeAvailable() && TajirDeviceBridge.getAppVersion){
+      return String(TajirDeviceBridge.getAppVersion());
+    }
+  }catch(e){}
+  return '1.7.0';
+}
+
+/* مجموع تحقق متعدد الحدود (نفس الخوارزمية في مولّد الأكواد) */
+function polyChecksum(s){
+  var h = 7;
+  s = String(s || '');
+  for(var i = 0; i < s.length; i++){
+    h = ((h * 131) + s.charCodeAt(i)) & 0xFFFF;
+  }
+  var v = h % 256;
+  return ('0' + v.toString(16)).slice(-2).toUpperCase();
+}
+
+/* تحويل يوم إلى تاريخ مقروء (يوم منذ 1970-01-01) */
+function epochDayToDate(day){
+  try{
+    var t = Number(day) * 86400000;
+    var d = new Date(t);
+    return d.toLocaleDateString('ar-EG', { year:'numeric', month:'long', day:'numeric' });
+  }catch(e){ return String(day); }
+}
+function todayEpochDay(){
+  return Math.floor(Date.now() / 86400000);
+}
+/* تحويل عدد إلى base36 أحرف كبيرة */
+function toBase36(n){
+  n = Number(n) || 0;
+  if(n < 0) n = 0;
+  return n.toString(36).toUpperCase();
+}
+function fromBase36(s){
+  try{ return parseInt(String(s || ''), 36); }
+  catch(e){ return NaN; }
+}
+
+/* حالة الاشتراك */
+function loadSub(){
+  try{
+    var raw = localStorage.getItem(SUB_KEY);
+    if(!raw) return null;
+    var s = JSON.parse(raw);
+    if(!s || typeof s !== 'object') return null;
+    return s;
+  }catch(e){ return null; }
+}
+function saveSub(s){
+  try{ localStorage.setItem(SUB_KEY, JSON.stringify(s)); }catch(e){}
+}
+function clearSub(){ try{ localStorage.removeItem(SUB_KEY); }catch(e){} }
+
+/* التحقق من كود الاشتراك وإرجاع نتيجة مفصّلة */
+function validateSubCode(code){
+  var result = { ok:false, error:'', duration:0, expiryDay:0, expiryDate:'', daysLeft:0, code:'' };
+  var c = String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+  if(!c){ result.error = 'أدخل كود الاشتراك'; return result; }
+  if(!/^TJP-\d+-[0-9A-F]{8}-[0-9A-Z]+-[0-9A-F]{2}$/.test(c)){
+    result.error = 'صيغة الكود غير صحيحة — يجب أن يكون بصيغة TJP-...-...-...-..';
+    return result;
+  }
+  var parts = c.split('-');
+  /* parts = ['TJP', D, HASH8, EXP, CHK2] */
+  var D = parseInt(parts[1], 10);
+  var HASH8 = parts[2];
+  var EXP = parts[3];
+  var CHK2 = parts[4];
+  if(isNaN(D) || D <= 0){ result.error = 'مدة الاشتراك غير صالحة'; return result; }
+
+  /* 1) التحقق من بصمة الجهاز */
+  var devFp = getDeviceFingerprint();
+  if(HASH8 !== devFp){
+    result.error = 'هذا الكود مخصص لجهاز آخر — لا يعمل على هذا الجهاز';
+    return result;
+  }
+
+  /* 2) التحقق من مجموع التحقيق */
+  var expectChk = polyChecksum(String(D) + HASH8 + EXP);
+  if(CHK2 !== expectChk){
+    result.error = 'كود تالف أو غير صالح — تحقق من إدخاله بشكل صحيح';
+    return result;
+  }
+
+  /* 3) فك ترميز تاريخ الانتهاء */
+  var expDay = fromBase36(EXP);
+  if(isNaN(expDay) || expDay < 1){ result.error = 'تاريخ الانتهاء غير صالح'; return result; }
+  var today = todayEpochDay();
+
+  result.ok = true;
+  result.duration = D;
+  result.expiryDay = expDay;
+  result.expiryDate = epochDayToDate(expDay);
+  result.daysLeft = expDay - today;
+  result.code = c;
+  return result;
+}
+
+/* تفعيل الكود وحفظ الحالة */
+function activateSubCode(code){
+  var v = validateSubCode(code);
+  if(!v.ok){ toast(v.error, 'err'); return false; }
+  var prev = loadSub();
+  var sub = {
+    code: v.code,
+    activatedAt: new Date().toISOString(),
+    expiryDay: v.expiryDay,
+    expiryDate: v.expiryDate,
+    durationDays: v.duration,
+    daysLeftAtActivation: v.daysLeft
+  };
+  saveSub(sub);
+  /* تنبيه نظام عند التفعيل */
+  notifySystem('تم تفعيل الاشتراك', 'تاجر برو — اشتراك ساري حتى ' + v.expiryDate);
+  toast('تم تفعيل الاشتراك ✓ — ساري حتى ' + v.expiryDate);
+  updateNotifBadge();
+  return true;
+}
+
+/* حالة الاشتراك الحالية */
+function subStatus(){
+  var s = loadSub();
+  if(!s) return { active:false, state:'none', daysLeft:0, label:'لا اشتراك مفعّل', expiryDate:'' };
+  var today = todayEpochDay();
+  var left = s.expiryDay - today;
+  if(left <= 0){
+    return { active:false, state:'expired', daysLeft:left, label:'انتهى الاشتراك', expiryDate:s.expiryDate||'' };
+  }
+  if(left <= 7){
+    return { active:true, state:'soon', daysLeft:left, label:'ينتهي خلال ' + left + ' يوم', expiryDate:s.expiryDate||'' };
+  }
+  if(left <= 30){
+    return { active:true, state:'warn', daysLeft:left, label:'ينتهي خلال ' + left + ' يوم', expiryDate:s.expiryDate||'' };
+  }
+  return { active:true, state:'ok', daysLeft:left, label:'ساري — متبقي ' + left + ' يوم', expiryDate:s.expiryDate||'' };
+}
+
+/* عدد الأيام المنقضية منذ آخر تذكير بهذا النوع */
+var _lastNotifKey = 'tajirpro_lastNotif';
+function shouldNotify(kind, intervalDays){
+  try{
+    var raw = localStorage.getItem(_lastNotifKey);
+    var m = raw ? JSON.parse(raw) : {};
+    var last = m[kind] ? Number(m[kind]) : 0;
+    var now = Date.now();
+    if(now - last >= intervalDays * 86400000){
+      m[kind] = now;
+      localStorage.setItem(_lastNotifKey, JSON.stringify(m));
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+/* إرسال إشعار نظام محلي (إذا كانت الصلاحية متاحة) */
+function notifySystem(title, body){
+  try{
+    if(deviceBridgeAvailable() && TajirDeviceBridge.showNotification){
+      TajirDeviceBridge.showNotification(title, body);
+    }
+  }catch(e){}
+}
+
+/* فحص دوري لتنبيهات الاشتراك عند فتح التطبيق */
+function checkSubscriptionAlerts(){
+  var st = subStatus();
+  if(st.state === 'expired'){
+    if(shouldNotify('sub_expired', 1)){
+      notifySystem('انتهى اشتراك تاجر برو', 'الرجاء تجديد الاشتراك لمواصلة استخدام التطبيق. اضغط للاطلاع على التفاصيل.');
+    }
+  }else if(st.state === 'soon'){
+    if(shouldNotify('sub_soon', 1)){
+      notifySystem('اشتراكك ينتهي قريباً', 'متبقي ' + st.daysLeft + ' يوم على انتهاء اشتراك تاجر برو. جدّد الآن لتجنب الانقطاع.');
+    }
+  }
+}
+
+/* ============================================================
+   مركز التنبيهات — الجرس + لوحة التنبيهات
+   ============================================================ */
+
+function computeNotifList(){
+  var list = [];
+  var st = subStatus();
+
+  /* 1) تنبيه الاشتراك */
+  if(st.state === 'none'){
+    list.push({
+      kind:'sub', level:'danger', icon:'🔒',
+      title:'لا يوجد اشتراك مفعّل',
+      body:'فعّل اشتراكك بكود صالح لهذا الجهاز لفتح جميع الميزات.',
+      actionLabel:'تفعيل الآن', actionFn:'openSubscriptionModal()'
+    });
+  }else if(st.state === 'expired'){
+    list.push({
+      kind:'sub', level:'danger', icon:'⏰',
+      title:'انتهى اشتراك تاجر برو',
+      body:'انتهى الاشتراك — جدّده بكود جديد لمواصلة استخدام التطبيق.',
+      actionLabel:'تجديد', actionFn:'openSubscriptionModal()'
+    });
+  }else if(st.state === 'soon'){
+    list.push({
+      kind:'sub', level:'warn', icon:'⚠️',
+      title:'اشتراكك ينتهي قريباً',
+      body:'متبقي ' + st.daysLeft + ' يوم (ينتهي ' + st.expiryDate + '). جدّد قبل الانتهاء.',
+      actionLabel:'تجديد', actionFn:'openSubscriptionModal()'
+    });
+  }else if(st.state === 'warn'){
+    list.push({
+      kind:'sub', level:'info', icon:'🔔',
+      title:'تذكير: اشتراكك ينتهي خلال شهر',
+      body:'متبقي ' + st.daysLeft + ' يوم (ينتهي ' + st.expiryDate + '). جدّد في وقت مناسب.',
+      actionLabel:'عرض الاشتراك', actionFn:'openSubscriptionModal()'
+    });
+  }else{
+    list.push({
+      kind:'sub', level:'ok', icon:'✓',
+      title:'الاشتراك ساري',
+      body:'متبقي ' + st.daysLeft + ' يوم — ينتهي ' + st.expiryDate + '.',
+      actionLabel:'تفاصيل', actionFn:'openSubscriptionModal()'
+    });
+  }
+
+  /* 2) تنبيهات المخزون */
+  var A = computeAlerts();
+  if(A.out.length){
+    list.push({
+      kind:'stock', level:'danger', icon:'📦',
+      title:A.out.length + ' منتج نفد',
+      body: A.out.slice(0,3).map(function(p){ return p.name; }).join('، ') + (A.out.length > 3 ? '…' : ''),
+      actionLabel:'معالجة', actionFn:'openAlerts(\'stock\')'
+    });
+  }
+  if(A.low.length){
+    list.push({
+      kind:'stock', level:'warn', icon:'📉',
+      title:A.low.length + ' منتج منخفض',
+      body: A.low.slice(0,3).map(function(p){ return p.name + ' (' + p.qty + ')'; }).join('، ') + (A.low.length > 3 ? '…' : ''),
+      actionLabel:'معالجة', actionFn:'openAlerts(\'stock\')'
+    });
+  }
+  if(A.expired.length){
+    list.push({
+      kind:'expiry', level:'danger', icon:'⏳',
+      title:A.expired.length + ' منتج منتهي الصلاحية',
+      body: A.expired.slice(0,3).map(function(p){ return p.name; }).join('، ') + (A.expired.length > 3 ? '…' : ''),
+      actionLabel:'معالجة', actionFn:'openAlerts(\'expiry\')'
+    });
+  }
+  if(A.expiring.length){
+    list.push({
+      kind:'expiry', level:'warn', icon:'📅',
+      title:A.expiring.length + ' منتج تنتهي صلاحيته قريباً',
+      body: A.expiring.slice(0,3).map(function(p){ return p.name; }).join('، ') + (A.expiring.length > 3 ? '…' : ''),
+      actionLabel:'معالجة', actionFn:'openAlerts(\'expiry\')'
+    });
+  }
+
+  /* 3) تنبيه التحديثات — فحص الإصدار */
+  list.push({
+    kind:'update', level:'info', icon:'🔄',
+    title:'إصدارك الحالي: ' + getAppVersion(),
+    body:'للتحقق من وجود تحديثات، افتح صفحة الإصدارات على GitHub.',
+    actionLabel:'فحص التحديثات', actionFn:'checkForUpdates()'
+  });
+
+  return list;
+}
+
+function updateNotifBadge(){
+  var list = computeNotifList();
+  var count = list.filter(function(n){ return n.level !== 'ok' && n.level !== 'info'; }).length;
+  var badge = $('#notifBadge');
+  if(!badge) return;
+  if(count > 0){
+    badge.textContent = count > 9 ? '9+' : count;
+    badge.style.display = 'flex';
+  }else{
+    badge.style.display = 'none';
+  }
+}
+
+function openNotifications(){
+  var list = computeNotifList();
+  var html = sheetHead('مركز التنبيهات');
+  html += '<div class="notif-list">';
+  list.forEach(function(n){
+    var cls = 'notif-item lvl-' + n.level;
+    html += '<div class="' + cls + '">' +
+      '<div class="ni-icon">' + n.icon + '</div>' +
+      '<div class="ni-body">' +
+        '<div class="ni-title">' + esc(n.title) + '</div>' +
+        '<div class="ni-sub">' + esc(n.body) + '</div>' +
+        (n.actionFn ? '<button class="btn sm" style="margin-top:8px" onclick="closeModal();' + n.actionFn + '">' + esc(n.actionLabel) + '</button>' : '') +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  html += '<div class="notif-foot">' +
+    '<button class="btn sm outline block" onclick="openSubscriptionModal()">إدارة الاشتراك</button>' +
+  '</div>';
+  openModal(html);
+}
+
+/* ============================================================
+   مولّد الأكواد (وضع المسؤول) — مدمج للتطوير والإدارة
+   ============================================================ */
+
+/* وضع المسؤول: يُفتح بالنقر 5 مرات على نص «حول التطبيق» أو عبر openAdminGen() */
+function openAdminGen(){
+  var fp = getDeviceFingerprint();
+  var html = sheetHead('مولّد أكواد الاشتراك (إدارة)');
+  html += '<div class="small-note" style="margin-bottom:12px;color:var(--muted)">' +
+    'هذه الأداة للمسؤول فقط. أدخل بصمة الجهاز (8 محارف) ومدة الاشتراك بالأيام، ثم اضغط «توليد» للحصول على كود صالح لهذا الجهاز فقط.' +
+    '</div>';
+  html += '<div class="field"><label>بصمة الجهاز (HASH8)</label>' +
+    '<input id="agenFp" type="text" value="' + esc(fp) + '" maxlength="8" placeholder="مثال: A1B2C3D4" style="font-family:monospace;direction:ltr;text-align:center;text-transform:uppercase">' +
+    '<div class="small-note" style="margin-top:6px">بصمة هذا الجهاز الحالي: <b class="ltr">' + esc(fp) + '</b> — اضغط لنسخها: <button class="btn xs ghost" onclick="copyText(\'' + fp + '\')">نسخ</button></div>' +
+    '</div>';
+  html += '<div class="field"><label>مدة الاشتراك (أيام)</label>' +
+    '<div class="chips">' +
+      '<button class="chip" onclick="$(\'#agenDur\').value=30">30 يوم</button>' +
+      '<button class="chip" onclick="$(\'#agenDur\').value=90">90 يوم</button>' +
+      '<button class="chip" onclick="$(\'#agenDur\').value=180">180 يوم</button>' +
+      '<button class="chip" onclick="$(\'#agenDur\').value=365">سنة كاملة</button>' +
+    '</div>' +
+    '<input id="agenDur" type="number" inputmode="numeric" min="1" value="30" style="margin-top:8px">' +
+    '</div>';
+  html += '<div class="field"><label>تاريخ بداية الاشتراك (اختياري)</label>' +
+    '<input id="agenStart" type="date" style="direction:ltr">' +
+    '<div class="small-note" style="margin-top:6px">اتركه فارغاً ليعتبر التاريخ الحالي هو البداية.</div>' +
+    '</div>';
+  html += '<button class="btn block" onclick="adminGenCode()">🔑 توليد الكود</button>';
+  html += '<div id="agenResult" style="margin-top:14px"></div>';
+  openModal(html);
+}
+
+function adminGenCode(){
+  var fp = String($('#agenFp').value || '').trim().toUpperCase();
+  var dur = parseInt($('#agenDur').value, 10);
+  var startStr = $('#agenStart').value;
+  if(!/^[0-9A-F]{8}$/.test(fp)){ toast('بصمة الجهاز يجب أن تكون 8 محارف سداسية عشر', 'err'); return; }
+  if(isNaN(dur) || dur <= 0){ toast('أدخل مدة اشتراك صحيحة بالأيام', 'err'); return; }
+  var startDay = todayEpochDay();
+  if(startStr){
+    var t = new Date(startStr + 'T00:00:00');
+    if(!isNaN(t.getTime())) startDay = Math.floor(t.getTime() / 86400000);
+  }
+  var expDay = startDay + dur;
+  var exp = toBase36(expDay);
+  var chk = polyChecksum(String(dur) + fp + exp);
+  var code = 'TJP-' + dur + '-' + fp + '-' + exp + '-' + chk;
+  var expDate = epochDayToDate(expDay);
+  var out = $('#agenResult');
+  out.innerHTML =
+    '<div class="sim-result">' +
+      '<div class="sr-label">تم توليد الكود:</div>' +
+      '<div class="sr-code ltr">' + esc(code) + '</div>' +
+      '<div class="sr-meta">ينتهي في: <b>' + esc(expDate) + '</b></div>' +
+      '<div class="btn-row" style="margin-top:10px">' +
+        '<button class="btn sm" onclick="copyText(\'' + code.replace(/'/g, "\\'") + '\')">📋 نسخ الكود</button>' +
+        '<button class="btn sm outline" onclick="activateSubCode(\'' + code.replace(/'/g, "\\'") + '\');closeModal()">تفعيل على هذا الجهاز</button>' +
+      '</div>' +
+    '</div>';
+  toast('تم توليد الكود ✓');
+}
+
+/* ============================================================
+   مودال تفعيل الاشتراك + شاشة القفل
+   ============================================================ */
+
+function openSubscriptionModal(){
+  var st = subStatus();
+  var fp = getDeviceFingerprint();
+  var devId = getDeviceIdFull();
+  var html = sheetHead('إدارة الاشتراك');
+
+  /* بطاقة حالة الاشتراك */
+  var stateLabel = { none:'🚫 غير مفعّل', ok:'✅ ساري', warn:'🔔 ينتهي قريباً', soon:'⚠️ ينتهي قريباً جداً', expired:'⏰ منتهي' }[st.state] || st.label;
+  var stateCls = 'sub-state-' + (st.state === 'none' ? 'none' : st.state);
+  html += '<div class="sub-status-card ' + stateCls + '">' +
+    '<div class="ss-label">حالة الاشتراك</div>' +
+    '<div class="ss-state">' + esc(stateLabel) + '</div>' +
+    (st.expiryDate ? '<div class="ss-expiry">ينتهي في: <b>' + esc(st.expiryDate) + '</b>' +
+      (st.daysLeft > 0 ? ' — متبقي ' + st.daysLeft + ' يوم' : '') + '</div>' : '') +
+  '</div>';
+
+  /* معلومات الجهاز */
+  html += '<div class="card">' +
+    '<div class="card-title">📱 معلومات الجهاز</div>' +
+    '<div class="sub-device-row"><span>بصمة الجهاز</span><b class="ltr fp-chip">' + esc(fp) + '</b></div>' +
+    '<div class="sub-device-row"><span>معرّف الجهاز الكامل</span><b class="ltr" style="font-size:11px;word-break:break-all">' + esc(devId) + '</b></div>' +
+    '<div class="small-note" style="margin-top:10px">💡 البصمة (8 محارف) هي ما يحتاجه المسؤول لتوليد كود خاص بهذا الجهاز. أرسلها له بأمان.</div>' +
+    '<div class="btn-row" style="margin-top:8px">' +
+      '<button class="btn sm outline" onclick="copyText(\'' + fp + '\')">📋 نسخ البصمة</button>' +
+      '<button class="btn sm outline" onclick="openAdminGen()">🔑 مولّد الأكواد (مسؤول)</button>' +
+    '</div>' +
+  '</div>';
+
+  /* تفعيل / تجديد */
+  html += '<div class="card">' +
+    '<div class="card-title">🔑 ' + (st.state === 'none' ? 'تفعيل الاشتراك' : 'تجديد الاشتراك') + '</div>' +
+    '<div class="field"><label>كود الاشتراك</label>' +
+    '<input id="subCodeInput" type="text" placeholder="TJP-...-...-...-.." style="font-family:monospace;direction:ltr;text-align:center;text-transform:uppercase" autocomplete="off">' +
+    '</div>' +
+    '<button class="btn block" onclick="doActivateSub()">تفعيل / تجديد</button>';
+  if(st.state !== 'none'){
+    html += '<button class="btn sm danger block" style="margin-top:8px" onclick="cancelSub()">إلغاء الاشتراك الحالي</button>';
+  }
+  html += '</div>';
+
+  openModal(html);
+}
+
+function doActivateSub(){
+  var code = $('#subCodeInput').value;
+  if(!code || !code.trim()){ toast('أدخل كود الاشتراك', 'err'); return; }
+  if(activateSubCode(code)){
+    closeModal();
+  }
+}
+function cancelSub(){
+  confirmDlg('إلغاء الاشتراك', 'سيتم إزالة الاشتراك الحالي من هذا الجهاز. ستحتاج كوداً جديداً لإعادة التفعيل.', function(){
+    clearSub();
+    toast('تم إلغاء الاشتراك');
+    closeModal();
+    updateNotifBadge();
+  }, { danger: true, yesLabel: 'إلغاء الاشتراك' });
+}
+
+/* فحص التحديثات — يفتح صفحة إصدارات GitHub */
+function checkForUpdates(){
+  var url = 'https://github.com/salah55t/tajir-pro/releases';
+  try{
+    if(deviceBridgeAvailable() && TajirDeviceBridge.openUrl){
+      TajirDeviceBridge.openUrl(url);
+      toast('جاري فتح صفحة الإصدارات…');
+    }else{
+      openDialog(
+        '<h3>تحقق من التحديثات</h3>' +
+        '<p>افتح الرابط التالي في متصفح الهاتف للتحقق من أحدث إصدار:</p>' +
+        '<div class="sr-code ltr" style="font-size:11px">' + esc(url) + '</div>' +
+        '<div class="btn-row" style="margin-top:12px">' +
+          '<button class="btn sm" onclick="copyText(\'' + url + '\')">📋 نسخ الرابط</button>' +
+          '<button class="btn sm ghost" onclick="closeModal()">إغلاق</button>' +
+        '</div>'
+      );
+    }
+  }catch(e){ toast('تعذر فتح الرابط', 'err'); }
+}
+
+/* ============================================================
    التهيئة
    ============================================================ */
 function init(){
@@ -2442,7 +2957,19 @@ function init(){
     if(meta) meta.setAttribute('content', savedTheme === 'dark' ? '#0B1220' : '#047857');
   }catch(e){}
   $('#storeNameTop').textContent = db.settings.storeName;
+  /* نظام الاشتراك: فحص التنبيهات + تحديث الشارة */
+  try{
+    checkSubscriptionAlerts();
+    updateNotifBadge();
+    /* الاستماع لحدث صلاحية الإشعارات من الجسر */
+    window.__notifPermissionEvent = function(granted){
+      if(granted) toast('تم تفعيل تنبيهات النظام ✓');
+      else toast('لم تُمنح صلاحية الإشعارات — ستبقى التنبيهات داخل التطبيق', 'err');
+    };
+  }catch(e){}
   showTab('dash');
+  /* تكرار تحديث الشارة كل دقيقة (يلتقط تغيّر حالة الاشتراك) */
+  setInterval(function(){ try{ updateNotifBadge(); }catch(e){} }, 60000);
 }
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', init);

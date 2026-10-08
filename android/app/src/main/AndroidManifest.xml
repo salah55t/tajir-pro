@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
+    <!-- تنبيهات النظام لانتهاء الاشتراك والتحديثات (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- يسمح للتطبيق بفتح نفسه عند النقر على الإشعار (ضروري لـ PendingIntent) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

@@ -2,11 +2,16 @@ package com.tajirpro.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -16,6 +21,7 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -29,6 +35,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.NotificationCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import com.google.zxing.BarcodeFormat;
@@ -41,6 +48,7 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
+import java.security.MessageDigest;
 import java.util.Hashtable;
 import java.util.Locale;
 import java.util.UUID;
@@ -67,6 +75,9 @@ public class MainActivity extends Activity {
             "https://appassets.androidplatform.net/assets/index.html";
     private static final int REQ_CAMERA = 1001;
     private static final int REQ_BLUETOOTH = 1002;
+    private static final int REQ_NOTIFICATION = 1003;
+    private static final String NOTIF_CHANNEL_ID = "tajirpro_subscription";
+    private static final String NOTIF_CHANNEL_NAME = "تنبيهات الاشتراك والتحديثات";
 
     /** Standard Bluetooth SPP UUID used by virtually all ESC/POS printers. */
     private static final UUID SPP_UUID =
@@ -185,6 +196,113 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** JS bridge: device identity, app version, notifications & updates. */
+    private class DeviceBridge {
+
+        /** Stable, privacy-friendly per-device + per-app identifier.
+         *  Uses ANDROID_ID (stable across app reinstalls on Android 8+,
+         *  unique per app-signing-key per device). Salted with the app
+         *  package name so different apps on the same device differ. */
+        @JavascriptInterface public String getDeviceId() {
+            try {
+                String androidId = Settings.Secure.getString(
+                        getContentResolver(), Settings.Secure.ANDROID_ID);
+                if (androidId == null || androidId.isEmpty()) androidId = "unknown";
+                String salted = "tajirpro::" + androidId + "::" + getPackageName();
+                return sha256Hex(salted).substring(0, 32);
+            } catch (Exception e) {
+                return "fallback-" + Build.BOARD + "-" + Build.MODEL;
+            }
+        }
+
+        /** Short 8-hex-char device fingerprint — embedded inside subscription codes. */
+        @JavascriptInterface public String getDeviceFingerprint() {
+            try {
+                String id = getDeviceId();
+                return id.substring(0, 8);
+            } catch (Exception e) { return "00000000"; }
+        }
+
+        @JavascriptInterface public String getAppVersion() {
+            try {
+                PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                return pi.versionName != null ? pi.versionName : "1.0.0";
+            } catch (Exception e) { return "1.0.0"; }
+        }
+
+        @JavascriptInterface public int getAppVersionCode() {
+            try {
+                PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+                return pi.versionCode;
+            } catch (Exception e) { return 1; }
+        }
+
+        /** True if the user has granted POST_NOTIFICATIONS (Android 13+). */
+        @JavascriptInterface public boolean hasNotificationPermission() {
+            if (Build.VERSION.SDK_INT < 33) return true;
+            return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface public void requestNotificationPermission() {
+            if (Build.VERSION.SDK_INT < 33) {
+                emit("notifPermission", "{\"granted\":true}");
+                return;
+            }
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED) {
+                emit("notifPermission", "{\"granted\":true}");
+                return;
+            }
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQ_NOTIFICATION);
+        }
+
+        /** Show a local system notification. title/body must not be null. */
+        @JavascriptInterface public void showNotification(String title, String body) {
+            try {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                                != PackageManager.PERMISSION_GRANTED) {
+                    return; /* no permission — silently skip; app still shows in-app banner */
+                }
+                NotificationManager nm = (NotificationManager)
+                        getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm == null) return;
+                if (Build.VERSION.SDK_INT >= 26 &&
+                        nm.getNotificationChannel(NOTIF_CHANNEL_ID) == null) {
+                    NotificationChannel ch = new NotificationChannel(
+                            NOTIF_CHANNEL_ID, NOTIF_CHANNEL_NAME,
+                            NotificationManager.IMPORTANCE_DEFAULT);
+                    ch.enableVibration(true);
+                    ch.setDescription("تنبيهات اشتراك تاجر برو وتحديثات التطبيق");
+                    nm.createNotificationChannel(ch);
+                }
+                Intent intent = new Intent(MainActivity.this, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                PendingIntent pi = PendingIntent.getActivity(MainActivity.this, 0, intent,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                NotificationCompat.Builder b = new NotificationCompat.Builder(
+                        MainActivity.this, NOTIF_CHANNEL_ID)
+                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setContentTitle(title)
+                        .setContentText(body)
+                        .setContentIntent(pi)
+                        .setAutoCancel(true)
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText(body));
+                nm.notify(2001, b.build());
+            } catch (Exception ignored) {}
+        }
+
+        /** Open an external URL (used for update / GitHub releases). */
+        @JavascriptInterface public void openUrl(String url) {
+            try {
+                if (url == null || url.isEmpty()) return;
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            } catch (Exception ignored) {}
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -248,6 +366,10 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new ScannerBridge(), "TajirScannerBridge");
         webView.addJavascriptInterface(new PrintBridge(), "TajirPrintBridge");
+        webView.addJavascriptInterface(new DeviceBridge(), "TajirDeviceBridge");
+
+        /* إنشاء قناة الإشعارات مبكراً لتتوفر عند أول تنبيه اشتراك */
+        createNotificationChannel();
 
         // Ask for the camera up front — scanning is a core POS feature.
         requestCameraPermission();
@@ -310,7 +432,31 @@ public class MainActivity extends Activity {
             boolean ok = grantResults.length > 0
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             emit("permission", "{\"granted\":" + ok + "}");
+        } else if (requestCode == REQ_NOTIFICATION) {
+            boolean ok = grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            emit("notifPermission", "{\"granted\":" + ok + "}");
         }
+    }
+
+    /* ============================================================
+       Notifications — channel setup
+       ============================================================ */
+
+    private void createNotificationChannel() {
+        try {
+            if (Build.VERSION.SDK_INT < 26) return;
+            NotificationManager nm = (NotificationManager)
+                    getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            if (nm.getNotificationChannel(NOTIF_CHANNEL_ID) != null) return;
+            NotificationChannel ch = new NotificationChannel(
+                    NOTIF_CHANNEL_ID, NOTIF_CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            ch.enableVibration(true);
+            ch.setDescription("تنبيهات اشتراك تاجر برو وتحديثات التطبيق");
+            nm.createNotificationChannel(ch);
+        } catch (Exception ignored) {}
     }
 
     /* ============================================================
@@ -701,6 +847,26 @@ public class MainActivity extends Activity {
     }
 
     /* ============================================================
+       Crypto helpers — SHA-256 for device fingerprint & code signing
+       ============================================================ */
+
+    private static String sha256Hex(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(s.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                String h = Integer.toHexString(b & 0xFF);
+                if (h.length() == 1) sb.append('0');
+                sb.append(h);
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "0000000000000000000000000000000000000000000000000000000000000000";
+        }
+    }
+
+    /* ============================================================
        JS event bridge
        ============================================================ */
 
@@ -708,6 +874,18 @@ public class MainActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override public void run() {
                 if (webView == null) return;
+                /* notifPermission events are dispatched to a dedicated listener
+                 * that takes a single boolean argument. All other events go to
+                 * the legacy __printEvent(type, json) handler. */
+                if ("notifPermission".equals(type)) {
+                    try {
+                        boolean granted = json != null && json.contains("\"granted\":true");
+                        webView.evaluateJavascript(
+                                "(window.__notifPermissionEvent||function(g){})(" + granted + ");",
+                                null);
+                    } catch (Exception ignored) {}
+                    return;
+                }
                 webView.evaluateJavascript(
                         "(window.__printEvent||function(){})('" + type + "'," + json + ");", null);
             }

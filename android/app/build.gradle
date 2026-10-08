@@ -10,8 +10,8 @@ android {
         applicationId "com.tajirpro.app"
         minSdk 21
         targetSdk 34
-        versionCode 9
-        versionName "1.6.0"
+        versionCode 10
+        versionName "1.7.0"
     }
 
     buildTypes {
@@ -32,4 +32,6 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.11.0'
     // توليد رمز QR للفاتورة عند الطباعة الحرارية (مكتبة Java خالصة — تعمل بدون إنترنت)
     implementation 'com.google.zxing:core:3.5.3'
+    // إشعارات النظام لتنبيهات الاشتراك والتحديثات (NotificationCompat + قنوات)
+    implementation 'androidx.core:core:1.13.1'
 }

@@ -29,14 +29,23 @@ try{
       <div id="pageTitle" class="page-sub">الرئيسية</div>
     </div>
   </div>
-  <div class="offline-chip">
-    <span class="dot"></span> يعمل بدون إنترنت
+  <div class="topbar-actions">
+    <div class="offline-chip">
+      <span class="dot"></span> يعمل بدون إنترنت
+    </div>
+    <button id="notifBtn" class="icon-btn notif-btn" onclick="openNotifications()" aria-label="التنبيهات" title="التنبيهات والاشتراك">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.7 21a2 2 0 01-3.4 0"/>
+      </svg>
+      <span id="notifBadge" class="notif-badge" style="display:none">0</span>
+    </button>
+    <button id="themeBtn" class="icon-btn theme-btn" onclick="toggleTheme()" aria-label="تبديل الوضع الليلي" title="الوضع الليلي / النهاري">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>
+      </svg>
+    </button>
   </div>
-  <button id="themeBtn" class="theme-btn" onclick="toggleTheme()" aria-label="تبديل الوضع الليلي" title="الوضع الليلي / النهاري">
-    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>
-    </svg>
-  </button>
 </header>
 
 <main id="view"></main>
