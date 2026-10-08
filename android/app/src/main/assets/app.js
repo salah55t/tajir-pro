@@ -1,9 +1,10 @@
 'use strict';
 /* ============================================================
-   تاجر برو — TajirPro v1.6.0
+   تاجر برو — TajirPro v1.8.0
    تطبيق إدارة المتاجر: نقطة بيع بقارئ باركود + مخزون + تنبيهات
    + طباعة الفواتير حرارياً عبر البلوتوث + رمز تحقق لكل فاتورة
    + وضع ليلي + لوحة تحكم برسوم بيانية
+   + نظام اشتراك صالح لجهاز واحد + قفل الميزات للنسخة المجانية
    يعمل بالكامل بدون إنترنت — البيانات محفوظة على الجهاز
    ============================================================ */
 
@@ -168,10 +169,17 @@ function seedIfEmpty(){
   var p1 = { id: nextId('product'), name:'سكر أبيض 1كغ',   category:'مواد غذائية', price:120, cost:100, qty:24, minQty:5, barcode:'6130001000015', expiry:'',                        createdAt: isoAgo(9000) };
   var p2 = { id: nextId('product'), name:'زيت طهي 1ل',      category:'مواد غذائية', price:280, cost:245, qty:15, minQty:5, barcode:'6130001000022', expiry:'',                        createdAt: isoAgo(8000) };
   var p3 = { id: nextId('product'), name:'أرز 1كغ',         category:'مواد غذائية', price:140, cost:120, qty:3,  minQty:5, barcode:'6130001000039', expiry:isoInDays(12),             createdAt: isoAgo(7000) };
-  var p4 = { id: nextId('product'), name:'شاي أخضر علبة',   category:'مشروبات',     price:350, cost:300, qty:8,  minQty:4, barcode:'6130002000011', expiry:'',                        createdAt: isoAgo(6000) };
-  var p5 = { id: nextId('product'), name:'قهوة 200غ',       category:'مشروبات',     price:450, cost:390, qty:2,  minQty:4, barcode:'6130002000028', expiry:isoInDays(80),             createdAt: isoAgo(5000) };
-  var p6 = { id: nextId('product'), name:'معجون طماطم',     category:'مواد غذائية', price:90,  cost:75,  qty:40, minQty:6, barcode:'6130003000018', expiry:isoInDays(200),            createdAt: isoAgo(4000) };
-  db.products = [p1, p2, p3, p4, p5, p6];
+
+  /* النسخة المفعّلة تحصل على بيانات تجريبية كاملة، النسخة المجانية على 3 منتجات فقط */
+  var locked = (typeof isLocked === 'function') ? isLocked() : false;
+  if(locked){
+    db.products = [p1, p2, p3];
+  }else{
+    var p4 = { id: nextId('product'), name:'شاي أخضر علبة',   category:'مشروبات',     price:350, cost:300, qty:8,  minQty:4, barcode:'6130002000011', expiry:'',                        createdAt: isoAgo(6000) };
+    var p5 = { id: nextId('product'), name:'قهوة 200غ',       category:'مشروبات',     price:450, cost:390, qty:2,  minQty:4, barcode:'6130002000028', expiry:isoInDays(80),             createdAt: isoAgo(5000) };
+    var p6 = { id: nextId('product'), name:'معجون طماطم',     category:'مواد غذائية', price:90,  cost:75,  qty:40, minQty:6, barcode:'6130003000018', expiry:isoInDays(200),            createdAt: isoAgo(4000) };
+    db.products = [p1, p2, p3, p4, p5, p6];
+  }
 
   db.movements = [
     { id: nextId('movement'), productId: p1.id, type:'in',  qty:30, note:'رصيد افتتاحي', at: isoAgo(9000) },
@@ -623,6 +631,25 @@ function viewDash(){
   var dateStr = days[d.getDay()] + '، ' + d.getDate() + ' ' +
     ['يناير','فبراير','مارس','أبريل','ماي','يونيو','يوليوز','غشت','شتنبر','أكتوبر','نوفمبر','ديسمبر'][d.getMonth()];
 
+  /* لافتة القفل للنسخة المجانية */
+  var lockBannerHtml = '';
+  if(typeof isLocked === 'function' && isLocked()){
+    var usedPct = Math.min(100, Math.round((db.products.length / FREE_PRODUCT_LIMIT) * 100));
+    lockBannerHtml =
+      '<div class="lock-banner" onclick="openSubscriptionModal()">' +
+        '<div class="lb-icon">🔒</div>' +
+        '<div class="lb-body">' +
+          '<div class="lb-title">النسخة المجانية — مفعّلة بمميزات محدودة</div>' +
+          '<div class="lb-sub">المنتجات: ' + db.products.length + ' / ' + FREE_PRODUCT_LIMIT + ' • ' +
+            'الطباعة والنسخ الاحتياطي مُقفلة</div>' +
+          '<div class="lb-progress">' +
+            '<div class="lb-progress-bar" style="width:' + usedPct + '%"></div>' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn sm primary">🔑 تفعيل</button>' +
+      '</div>';
+  }
+
   var icons = {
     box: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>',
     coins: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15.5 9.5c-.8-.8-2-1.2-3.5-1.2-1.7 0-3 .8-3 2s1.2 1.8 3 2 3 .8 3 2-1.3 2-3 2c-1.5 0-2.7-.4-3.5-1.2"/></svg>',
@@ -677,6 +704,8 @@ function viewDash(){
       '<button class="h-btn" onclick="openProductModal()">' + icons.box + ' منتج جديد</button>' +
     '</div>' +
   '</div>' +
+
+  lockBannerHtml +
 
   '<div class="stat-grid">' +
     statCard(icons.cash,  'var(--green-bg)', 'var(--green)', money(s.todaySalesTotal), 'مبيعات اليوم (' + s.todaySalesCount + ')',
@@ -1798,6 +1827,13 @@ function viewInventory(){
     '</div>' +
   '</div>' +
   '<div class="chips" id="invChips">' + chips + '</div>' +
+  (typeof isLocked === 'function' && isLocked()
+    ? '<div class="inv-limit-banner">' +
+        '<div class="ilb-text"><b>' + db.products.length + '</b> / ' + FREE_PRODUCT_LIMIT + ' منتج (النسخة المجانية)</div>' +
+        '<div class="ilb-progress"><div class="ilb-progress-bar" style="width:' + Math.min(100, (db.products.length / FREE_PRODUCT_LIMIT) * 100) + '%"></div></div>' +
+        '<button class="btn sm primary" onclick="openSubscriptionModal()">🔑 ترقية لمنتجات غير محدودة</button>' +
+      '</div>'
+    : '') +
   '<div class="section-title"><span>المنتجات</span><span class="hint" id="invCount"></span></div>' +
   '<div id="invList">' + productCards(filteredProducts()) + '</div>';
 }
@@ -1850,6 +1886,10 @@ function catOptions(selected){
 function openProductModal(id, presetBarcode){
   var p = id ? findProduct(id) : null;
   var isEdit = !!p;
+  /* فحص حد المنتجات للنسخة المجانية (عند الإضافة فقط) */
+  if(!isEdit && !requireProductSlot()){
+    return; /* تم عرض شاشة القفل بالفعل */
+  }
   p = p || { name:'', category:'', price:'', cost:'', qty:'', minQty:'', barcode: presetBarcode || '', expiry: '' };
   openModal(
     sheetHead(isEdit ? 'تعديل منتج' : 'منتج جديد') +
@@ -2104,8 +2144,15 @@ function viewSettings(){
       '<span style="font-size:13px;font-weight:700">اهتزاز الجهاز عند المسح</span></div>' +
   '</div>' +
 
-  '<div class="card">' +
-    '<div class="card-title">🖨️ الطابعة الحرارية (بلوتوث)</div>' +
+  '<div class="card' + (isLockedFeature('print') ? ' locked-card' : '') + '">' +
+    '<div class="card-title">🖨️ الطابعة الحرارية (بلوتوث)' + (isLockedFeature('print') ? ' <span class="lock-chip">🔒 مقفلة</span>' : '') + '</div>' +
+    (isLockedFeature('print')
+      ? '<div class="locked-overlay" onclick="requireFeature(\'print\')">' +
+          '<div class="lo-icon">🔒</div>' +
+          '<div class="lo-text">الطباعة ميزة مدفوعة — فعّل اشتراكك لفتحها</div>' +
+          '<button class="btn sm primary">🔑 تفعيل</button>' +
+        '</div>'
+      : '') +
     '<div class="printer-status"><span class="p-led ' + (pbConnected() ? 'on' : '') + '"></span>' +
       '<span>' + (pbConnected() ? 'متصل: ' + esc(db.settings.printerName || 'الطابعة') : 'غير متصل — اختر طابعتك لبدء طباعة الفواتير') + '</span></div>' +
     '<div class="field" style="margin-bottom:8px"><label>مقاس ورق الطابعة</label><div class="chips">' +
@@ -2120,8 +2167,15 @@ function viewSettings(){
     '<div class="small-note" style="font-size:11.5px;color:var(--muted);margin-top:10px">💡 اربط الطابعة الحرارية ببلوتوث الهاتف من إعدادات النظام أولاً. بعد كل بيع يظهر زر «طباعة» في الفاتورة مباشرة، وتُطبع باسم المتجر مع رمز QR خاص بالفاتورة للتحقق ومنع الاحتيال.</div>' +
   '</div>' +
 
-  '<div class="card">' +
-    '<div class="card-title">💾 البيانات والنسخ الاحتياطي</div>' +
+  '<div class="card' + ((isLockedFeature('backup') || isLockedFeature('csv') || isLockedFeature('wipe')) ? ' locked-card' : '') + '">' +
+    '<div class="card-title">💾 البيانات والنسخ الاحتياطي' + ((isLockedFeature('backup') || isLockedFeature('csv')) ? ' <span class="lock-chip">🔒 مقفلة</span>' : '') + '</div>' +
+    (isLockedFeature('backup')
+      ? '<div class="locked-overlay" onclick="requireFeature(\'backup\')">' +
+          '<div class="lo-icon">🔒</div>' +
+          '<div class="lo-text">النسخ الاحتياطي ميزة مدفوعة</div>' +
+          '<button class="btn sm primary">🔑 تفعيل</button>' +
+        '</div>'
+      : '') +
     '<div class="btn-row">' +
       '<button class="btn sm outline" onclick="openExportJSON()">تصدير نسخة كاملة</button>' +
       '<button class="btn sm outline" onclick="openImportJSON()">استيراد نسخة</button>' +
@@ -2257,12 +2311,14 @@ function salePrintPayload(sale){
 }
 
 function printSale(id){
+  if(!requireFeature('print')) return;
   var s = findSale(id);
   if(!s) return;
   pbPrintPayload(salePrintPayload(s));
 }
 
 function printTestPage(){
+  if(!requireFeature('print')) return;
   var d = new Date();
   pbPrintPayload({
     storeName: db.settings.storeName || 'تاجر برو',
@@ -2375,10 +2431,12 @@ function openTextModal(title, content, hint, importMode){
 }
 
 function openExportJSON(){
+  if(!requireFeature('backup')) return;
   openTextModal('تصدير نسخة كاملة (JSON)', JSON.stringify(db, null, 2),
     'انسخ هذا المحتوى واحفظه في مكان آمن (ملاحظات الهاتف أو ملف نصي). يمكن استعادته لاحقاً عبر «استيراد نسخة».', false);
 }
 function openImportJSON(){
+  if(!requireFeature('backup')) return;
   openTextModal('استيراد نسخة احتياطية', '', 'الصق محتوى النسخة الاحتياطية (JSON) ثم اضغط استيراد. سيتم استبدال البيانات الحالية بالكامل.', true);
 }
 function doImport(){
@@ -2409,6 +2467,7 @@ function doImport(){
   }
 }
 function openExportCSV(){
+  if(!requireFeature('csv')) return;
   var head = ['الاسم', 'الباركود', 'التصنيف', 'سعر البيع', 'التكلفة', 'الكمية', 'حد التنبيه', 'الصلاحية', 'قيمة المخزون'];
   function q(v){ v = String(v == null ? '' : v); return '"' + v.replace(/"/g, '""') + '"'; }
   var lines = [head.map(q).join(',')];
@@ -2422,6 +2481,7 @@ function openExportCSV(){
   openTextModal('تصدير المخزون (CSV)', csv, 'انسخ المحتوى واحفظه بملف بامتداد .csv لفتحه في Excel — يدعم العربية.', false);
 }
 function clearAllData(){
+  if(!requireFeature('wipe')) return;
   confirmDlg('مسح جميع البيانات', 'سيتم حذف المنتجات والمبيعات نهائياً من هذا الجهاز. لا يمكن التراجع!', function(){
     localStorage.removeItem(DB_KEY);
     loadDB();
@@ -2493,7 +2553,7 @@ function getAppVersion(){
       return String(TajirDeviceBridge.getAppVersion());
     }
   }catch(e){}
-  return '1.7.0';
+  return '1.8.0';
 }
 
 /* مجموع تحقق متعدد الحدود (نفس الخوارزمية في مولّد الأكواد) */
@@ -2940,6 +3000,106 @@ function checkForUpdates(){
       );
     }
   }catch(e){ toast('تعذر فتح الرابط', 'err'); }
+}
+
+/* ============================================================
+   نظام القفل للنسخة غير المفعّلة (Trial Mode)
+   ============================================================
+   - النسخة غير المفعّلة:
+     • حد أقصى 3 منتجات في المخزون
+     • لا طباعة فواتير حرارية
+     • لا تصدير/استيراد نسخ احتياطية
+     • لا تصدير CSV
+     • لا مسح شامل للبيانات
+     • تنبيهات تذكيرية دورية
+   - النسخة المفعّلة (اشتراك ساري):
+     • كل الميزات مفتوحة بلا حدود
+   ============================================================ */
+
+var FREE_PRODUCT_LIMIT = 3;
+
+/* الميزات المقفلة في النسخة المجانية */
+var LOCKED_FEATURES = {
+  print:    { label:'الطباعة الحرارية', icon:'🖨️', desc:'طباعة الفواتير على الطابعة الحرارية عبر البلوتوث' },
+  backup:   { label:'النسخ الاحتياطي', icon:'💾', desc:'تصدير واستيراد نسخة كاملة من بياناتك (JSON)' },
+  csv:      { label:'تصدير CSV', icon:'📊', desc:'تصدير المخزون إلى ملف CSV يدعم العربية' },
+  wipe:     { label:'مسح البيانات', icon:'🗑️', desc:'مسح جميع البيانات نهائياً' }
+};
+
+/* التحقق من حالة القفل */
+function isLocked(){
+  var st = subStatus();
+  return !st.active; /* active=false تعني none أو expired */
+}
+function isLockedFeature(feature){
+  if(!isLocked()) return false;
+  return !!LOCKED_FEATURES[feature];
+}
+
+/* عدد المنتجات المسموح به */
+function productLimit(){
+  return isLocked() ? FREE_PRODUCT_LIMIT : 999999;
+}
+function canAddProduct(){
+  return db.products.length < productLimit();
+}
+function productLimitDisplay(){
+  return isLocked() ? FREE_PRODUCT_LIMIT : '∞';
+}
+
+/* عرض شاشة القفل (تطلب التفعيل) */
+function showLockScreen(feature, onActivate){
+  var info = LOCKED_FEATURES[feature] || { label:'هذه الميزة', icon:'🔒', desc:'' };
+  var html =
+    '<div class="lock-screen">' +
+      '<div class="ls-icon">' + info.icon + '</div>' +
+      '<h3 class="ls-title">' + esc(info.label) + ' — ميزة مدفوعة</h3>' +
+      '<p class="ls-desc">' + esc(info.desc || 'هذه الميزة متاحة فقط للاشتراكات السارية.') + '</p>' +
+      '<div class="ls-features">' +
+        '<div class="ls-feat-row"><span class="ls-check">✓</span> منتجات غير محدودة (الحد الحالي: ' + FREE_PRODUCT_LIMIT + ')</div>' +
+        '<div class="ls-feat-row"><span class="ls-check">✓</span> طباعة الفواتير حرارياً عبر البلوتوث</div>' +
+        '<div class="ls-feat-row"><span class="ls-check">✓</span> نسخ احتياطي كامل (JSON) وتصدير CSV</div>' +
+        '<div class="ls-feat-row"><span class="ls-check">✓</span> جميع الميزات المتقدمة بلا قيود</div>' +
+      '</div>' +
+      '<button class="btn block primary" onclick="closeModal();openSubscriptionModal();' +
+        (typeof onActivate === 'function' ? '' : '') + '">🔑 تفعيل الاشتراك الآن</button>' +
+      '<button class="btn sm ghost block" style="margin-top:8px" onclick="closeModal()">لاحقاً</button>' +
+      '<div class="small-note" style="margin-top:14px;color:var(--muted);text-align:center">' +
+        '💡 فاتورة البيع وسلة التسوق وقراءة الباركود متاحة في النسخة المجانية بلا قيود.</div>' +
+    '</div>';
+  openDialog(html);
+}
+
+/* عرض شاشة قفل حد المنتجات */
+function showProductLimitLock(){
+  var html =
+    '<div class="lock-screen">' +
+      '<div class="ls-icon">📦</div>' +
+      '<h3 class="ls-title">وصلت إلى الحد المجاني</h3>' +
+      '<p class="ls-desc">النسخة المجانية تتيح حتى ' + FREE_PRODUCT_LIMIT + ' منتجات فقط. ' +
+        'لديك حالياً ' + db.products.length + ' منتج. فعّل اشتراكك لإضافة منتجات غير محدودة.</p>' +
+      '<div class="ls-progress">' +
+        '<div class="ls-progress-bar" style="width:' + Math.min(100, (db.products.length / FREE_PRODUCT_LIMIT) * 100) + '%"></div>' +
+      '</div>' +
+      '<div class="ls-progress-label">' + db.products.length + ' / ' + FREE_PRODUCT_LIMIT + ' منتج</div>' +
+      '<button class="btn block primary" style="margin-top:16px" onclick="closeModal();openSubscriptionModal()">🔑 تفعيل الاشتراك — منتجات غير محدودة</button>' +
+      '<button class="btn sm ghost block" style="margin-top:8px" onclick="closeModal()">لاحقاً</button>' +
+    '</div>';
+  openDialog(html);
+}
+
+/* فحص قبل تنفيذ ميزة مقفلة — يُستدعى في كل ميزة حساسة */
+function requireFeature(feature){
+  if(!isLockedFeature(feature)){
+    return true; /* الميزة متاحة */
+  }
+  showLockScreen(feature);
+  return false;
+}
+function requireProductSlot(){
+  if(canAddProduct()) return true;
+  showProductLimitLock();
+  return false;
 }
 
 /* ============================================================
